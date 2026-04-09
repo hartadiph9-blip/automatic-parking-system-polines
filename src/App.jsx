@@ -16,31 +16,34 @@ function App() {
 
   const rfidInputRef = useRef(null);
 
-  // === FETCH DATA AWAL ===
+  // === FETCH DATA AWAL & REALTIME SUBSCRIPTION ===
   useEffect(() => {
     fetchInitialLogs();
 
-    // === REALTIME SUBSCRIPTION ===
     const channel = supabase.channel('custom-all-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'parking_logs' }, async (payload) => {
         console.log('Kendaraan Masuk:', payload.new);
         
-        // Cepat-cepat cari nama member berdasarkan RFID sebelum ditampilkan
-        const { data } = await supabase.from('members').select('nama').eq('rfid_id', payload.new.rfid_id).single();
-        const newLogWithMember = { ...payload.new, members: { nama: data ? data.nama : 'Tidak Terdaftar' } };
-        
-        // Tambahkan data baru (lengkap dengan nama) ke baris paling atas
-        setLogs(prevLogs => [newLogWithMember, ...prevLogs]);
+        // Hanya tampilkan jika statusnya IN
+        if (payload.new.status === 'IN') {
+            const { data } = await supabase.from('members').select('nama').eq('rfid_id', payload.new.rfid_id).single();
+            const newLogWithMember = { ...payload.new, members: { nama: data ? data.nama : 'Tidak Terdaftar' } };
+            
+            setLogs(prevLogs => [newLogWithMember, ...prevLogs]);
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
-        console.log('Kendaraan Keluar:', payload.new);
+        console.log('Kendaraan Keluar / Update:', payload.new);
         
-        // Cari nama member untuk data yang di-update
-        const { data } = await supabase.from('members').select('nama').eq('rfid_id', payload.new.rfid_id).single();
-        const updatedLogWithMember = { ...payload.new, members: { nama: data ? data.nama : 'Tidak Terdaftar' } };
-
-        // Timpa data lama dengan data baru
-        setLogs(prevLogs => prevLogs.map(log => log.id === payload.new.id ? updatedLogWithMember : log));
+        // Jika statusnya berubah menjadi 'OUT', hapus baris ini dari layar
+        if (payload.new.status === 'OUT') {
+           setLogs(prevLogs => prevLogs.filter(log => log.id !== payload.new.id));
+        } else {
+           // Jika ada update tapi status masih IN
+           const { data } = await supabase.from('members').select('nama').eq('rfid_id', payload.new.rfid_id).single();
+           const updatedLogWithMember = { ...payload.new, members: { nama: data ? data.nama : 'Tidak Terdaftar' } };
+           setLogs(prevLogs => prevLogs.map(log => log.id === payload.new.id ? updatedLogWithMember : log));
+        }
       })
       .subscribe();
 
@@ -51,19 +54,20 @@ function App() {
 
   const fetchInitialLogs = async () => {
     setLoading(true);
-    // Menggunakan JOIN untuk menarik nama dari tabel members
+    
+    // Tarik hanya yang berstatus 'IN'
     const { data, error } = await supabase
       .from('parking_logs')
-      .select('*, members(nama)') 
-      .order('id', { ascending: false })
-      .limit(5);
+      .select('*, members(nama)')
+      .eq('status', 'IN') 
+      .order('time_in', { ascending: false }); 
 
     if (data) setLogs(data);
     if (error) console.error(error);
     setLoading(false);
   };
 
-  // === HANDLER FORM ===
+  // === HANDLER FORM (YANG TADI SEMPAT HILANG) ===
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ 
@@ -94,6 +98,7 @@ function App() {
     }
   };
 
+  // === TAMPILAN UI ===
   return (
     <div className="bg-slate-900 text-slate-100 font-sans min-h-screen">
       {/* HEADER */}
@@ -174,7 +179,6 @@ function App() {
                 <tr className="bg-slate-900 text-slate-300 text-sm uppercase tracking-wide">
                   <th className="p-3 rounded-tl-lg">Waktu</th>
                   <th className="p-3">UID RFID</th>
-                  {/* Kolom Baru: Nama Pemilik */}
                   <th className="p-3">Nama Pemilik</th>
                   <th className="p-3">Status Palang</th>
                   <th className="p-3 rounded-tr-lg">Keterangan</th>
@@ -195,12 +199,9 @@ function App() {
                       <tr key={log.id} className="hover:bg-slate-800/50 transition-colors">
                         <td className="p-3 text-slate-300 font-mono">{timeFormatted}</td>
                         <td className="p-3 font-mono text-yellow-400">{log.rfid_id}</td>
-                        
-                        {/* Menampilkan Data Nama Pemilik */}
                         <td className="p-3 font-semibold text-slate-200">
                           {log.members?.nama || "Tidak Terdaftar"}
                         </td>
-
                         <td className="p-3">
                           {log.status === 'IN' ? (
                             <span className="px-2 py-1 bg-blue-900/50 text-blue-400 rounded text-xs font-bold border border-blue-800">GATE IN (UHF)</span>
