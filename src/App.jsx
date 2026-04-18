@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
-const MAX_SLOTS = 10; // Batas maksimal parkir
+const MAX_SLOTS = 6; // Batas maksimal parkir
 const ADMIN_PIN = 'POLINES123'; // PIN untuk masuk ke Web Admin
 
 // =====================================================================
@@ -390,7 +390,7 @@ function PublicWeb() {
 
       <div className={`absolute inset-0 flex flex-col transition-opacity duration-700 p-8 ${notify.show ? 'opacity-0' : 'opacity-100'}`}>
         <h1 className="text-3xl md:text-4xl font-bold text-slate-300 tracking-widest mb-8 text-center mt-4">
-          SISTEM PARKIR CERDAS <span className="text-yellow-400">POLINES</span>
+          AUTOMATIC PARKING SYSTEM <span className="text-yellow-400">POLINES</span>
         </h1>
         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8 max-w-7xl mx-auto w-full h-full pb-8">
           
@@ -405,7 +405,7 @@ function PublicWeb() {
               <div>
                 <span className="text-[10rem] leading-none font-black text-green-400 tracking-tighter">{availableSlots}</span>
                 <span className="text-6xl text-slate-500 font-medium ml-2">/ {MAX_SLOTS}</span>
-                <p className="text-2xl text-blue-300 mt-8 animate-pulse">Sistem Auto-Gate Aktif. Silakan Tap Kartu.</p>
+                <p className="text-2xl text-blue-300 mt-8 animate-pulse"> Sistem AUTO GATE ON.</p>
               </div>
             )}
           </div>
