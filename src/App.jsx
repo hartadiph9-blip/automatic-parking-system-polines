@@ -38,11 +38,14 @@ function AdminWeb() {
     }
   };
 
-  // Fungsi menghapus data parkir yang umurnya lebih dari 24 jam
+  // Fungsi menghapus data parkir yang umurnya lebih dari 24 jam (HANYA YANG SUDAH OUT)
   const autoDeleteOldLogs = async () => {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    await supabase.from('parking_logs').delete().lt('time_in', twentyFourHoursAgo);
-    console.log("Pembersihan otomatis histori lama berhasil.");
+    await supabase.from('parking_logs')
+      .delete()
+      .eq('status', 'OUT') // Syarat 1: Harus sudah keluar
+      .lt('time_in', twentyFourHoursAgo); // Syarat 2: Lebih dari 24 jam lalu
+    console.log("Pembersihan otomatis histori yang sudah lewat 24 jam berhasil.");
   };
 
   // --- EFEK UTAMA & REALTIME ---
@@ -55,7 +58,6 @@ function AdminWeb() {
 
     const channel = supabase.channel('admin-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'parking_logs' }, async (payload) => {
-        fetchHistory(); // Update histori jika ada yang masuk
         if (payload.new.status === 'IN') {
             const { data } = await supabase.from('members').select('nama').eq('rfid_id', payload.new.rfid_id).single();
             const newLogWithMember = { ...payload.new, members: { nama: data ? data.nama : 'Tidak Terdaftar' } };
@@ -63,7 +65,7 @@ function AdminWeb() {
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
-        fetchHistory(); // Update histori jika ada yang keluar
+        fetchHistory(); // Perbarui histori saat ada yang keluar (UPDATE ke OUT)
         if (payload.new.status === 'OUT') {
            setLogs(prevLogs => prevLogs.filter(log => log.id !== payload.new.id));
         } else {
@@ -80,6 +82,7 @@ function AdminWeb() {
   // --- FUNGSI PENGAMBILAN DATA ---
   const fetchInitialLogs = async () => {
     setLoading(true);
+    // Hanya ambil yang sedang parkir (IN)
     const { data } = await supabase.from('parking_logs').select('*, members(nama)').eq('status', 'IN').order('time_in', { ascending: false }); 
     if (data) setLogs(data);
     setLoading(false);
@@ -91,8 +94,8 @@ function AdminWeb() {
   };
 
   const fetchHistory = async () => {
-    // Ambil semua log (IN & OUT) untuk tab histori
-    const { data } = await supabase.from('parking_logs').select('*, members(nama)').order('time_in', { ascending: false }).limit(100);
+    // Hanya ambil yang SUDAH KELUAR (OUT) untuk masuk ke tabel histori
+    const { data } = await supabase.from('parking_logs').select('*, members(nama)').eq('status', 'OUT').order('time_in', { ascending: false }).limit(100);
     if (data) setHistoryLogs(data);
   };
 
@@ -294,11 +297,11 @@ function AdminWeb() {
           </div>
         )}
 
-        {/* TAB 3: HISTORI PARKIR */}
+        {/* TAB 3: HISTORI PARKIR (YANG SUDAH KELUAR) */}
         {activeTab === 'history' && (
           <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
              <h2 className="text-xl font-semibold text-white border-b border-slate-600 pb-2 mb-4 flex justify-between items-center">
-               <span>Histori Keluar-Masuk <span className="text-sm text-slate-400 font-normal ml-2">(Otomatis terhapus setelah 24 jam)</span></span>
+               <span>Riwayat Parkir Selesai <span className="text-sm text-slate-400 font-normal ml-2">(Terhapus otomatis 24 jam setelah keluar)</span></span>
                <button onClick={fetchHistory} className="text-sm bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded">Refresh Data</button>
              </h2>
              <div className="overflow-x-auto">
@@ -313,21 +316,19 @@ function AdminWeb() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
-                    {historyLogs.map(log => (
-                      <tr key={log.id} className="hover:bg-slate-800/50">
-                        <td className="p-3 text-slate-300 font-mono">{new Date(log.time_in).toLocaleString('id-ID')}</td>
-                        <td className="p-3 text-slate-400 font-mono">{log.time_out ? new Date(log.time_out).toLocaleString('id-ID') : '-'}</td>
-                        <td className="p-3 text-yellow-400 font-mono">{log.rfid_id}</td>
-                        <td className="p-3 text-white">{log.members?.nama || "Tamu"}</td>
-                        <td className="p-3">
-                           {log.status === 'IN' ? (
-                             <span className="text-blue-400 font-semibold">Sedang Parkir</span>
-                           ) : (
-                             <span className="text-green-400 font-semibold">Selesai (OUT)</span>
-                           )}
-                        </td>
-                      </tr>
-                    ))}
+                    {historyLogs.length === 0 ? (
+                      <tr><td colSpan="5" className="p-4 text-center text-slate-500">Belum ada riwayat parkir hari ini.</td></tr>
+                    ) : (
+                      historyLogs.map(log => (
+                        <tr key={log.id} className="hover:bg-slate-800/50">
+                          <td className="p-3 text-slate-300 font-mono">{new Date(log.time_in).toLocaleString('id-ID')}</td>
+                          <td className="p-3 text-slate-400 font-mono">{log.time_out ? new Date(log.time_out).toLocaleString('id-ID') : '-'}</td>
+                          <td className="p-3 text-yellow-400 font-mono">{log.rfid_id}</td>
+                          <td className="p-3 text-white">{log.members?.nama || "Tamu"}</td>
+                          <td className="p-3"><span className="px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-bold border border-green-800">SELESAI (OUT)</span></td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
              </div>
