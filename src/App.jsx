@@ -19,8 +19,8 @@ function AdminWeb() {
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState({ show: false, msg: '', isSuccess: true });
   
-  // State untuk form
-  const [formData, setFormData] = useState({ rfid_id: '', plat_nomor: '', nama: '' });
+  // UPDATE: Tambahkan telegram_chat_id ke dalam state form
+  const [formData, setFormData] = useState({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' });
   const [editMode, setEditMode] = useState(false);
   const rfidInputRef = useRef(null);
 
@@ -31,20 +31,19 @@ function AdminWeb() {
     e.preventDefault();
     if (pinInput === ADMIN_PIN) {
       setIsAuthenticated(true);
-      autoDeleteOldLogs(); // Jalankan pembersihan saat login
+      autoDeleteOldLogs(); 
     } else {
       window.alert('PIN Salah! Akses ditolak.');
       setPinInput('');
     }
   };
 
-  // Fungsi menghapus data parkir yang umurnya lebih dari 24 jam (HANYA YANG SUDAH OUT)
   const autoDeleteOldLogs = async () => {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     await supabase.from('parking_logs')
       .delete()
-      .eq('status', 'OUT') // Syarat 1: Harus sudah keluar
-      .lt('time_in', twentyFourHoursAgo); // Syarat 2: Lebih dari 24 jam lalu
+      .eq('status', 'OUT') 
+      .lt('time_in', twentyFourHoursAgo); 
     console.log("Pembersihan otomatis histori yang sudah lewat 24 jam berhasil.");
   };
 
@@ -65,7 +64,7 @@ function AdminWeb() {
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
-        fetchHistory(); // Perbarui histori saat ada yang keluar (UPDATE ke OUT)
+        fetchHistory(); 
         if (payload.new.status === 'OUT') {
            setLogs(prevLogs => prevLogs.filter(log => log.id !== payload.new.id));
         } else {
@@ -82,7 +81,6 @@ function AdminWeb() {
   // --- FUNGSI PENGAMBILAN DATA ---
   const fetchInitialLogs = async () => {
     setLoading(true);
-    // Hanya ambil yang sedang parkir (IN)
     const { data } = await supabase.from('parking_logs').select('*, members(nama)').eq('status', 'IN').order('time_in', { ascending: false }); 
     if (data) setLogs(data);
     setLoading(false);
@@ -94,7 +92,6 @@ function AdminWeb() {
   };
 
   const fetchHistory = async () => {
-    // Hanya ambil yang SUDAH KELUAR (OUT) untuk masuk ke tabel histori
     const { data } = await supabase.from('parking_logs').select('*, members(nama)').eq('status', 'OUT').order('time_in', { ascending: false }).limit(100);
     if (data) setHistoryLogs(data);
   };
@@ -114,31 +111,42 @@ function AdminWeb() {
     e.preventDefault();
     
     if (editMode) {
-      // UPDATE DATA MEMBER
-      const { error } = await supabase.from('members').update({ plat_nomor: formData.plat_nomor, nama: formData.nama }).eq('rfid_id', formData.rfid_id);
+      // UPDATE: Sertakan telegram_chat_id saat update
+      const { error } = await supabase.from('members').update({ 
+        plat_nomor: formData.plat_nomor, 
+        nama: formData.nama,
+        telegram_chat_id: formData.telegram_chat_id
+      }).eq('rfid_id', formData.rfid_id);
+
       if (error) showAlert('Gagal memperbarui data.', false);
       else {
         showAlert('Data member berhasil diperbarui!', true);
         setEditMode(false);
-        setFormData({ rfid_id: '', plat_nomor: '', nama: '' });
-        fetchMembers(); // Segarkan tabel member
+        setFormData({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' });
+        fetchMembers(); 
       }
     } else {
-      // INSERT DATA BARU
+      // INSERT DATA BARU (Otomatis memasukkan telegram_chat_id dari form)
       const { error } = await supabase.from('members').insert([formData]);
       if (error) showAlert('Gagal mendaftar. RFID/Plat mungkin sudah ada.', false);
       else {
         showAlert('Akses berhasil diverifikasi dan disimpan!', true);
-        setFormData({ rfid_id: '', plat_nomor: '', nama: '' });
+        setFormData({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' });
         fetchMembers();
       }
     }
   };
 
+  // UPDATE: Ambil telegram_chat_id dari database saat mau diedit
   const editMember = (member) => {
-    setFormData({ rfid_id: member.rfid_id, plat_nomor: member.plat_nomor, nama: member.nama });
+    setFormData({ 
+      rfid_id: member.rfid_id, 
+      plat_nomor: member.plat_nomor, 
+      nama: member.nama,
+      telegram_chat_id: member.telegram_chat_id || '' 
+    });
     setEditMode(true);
-    setActiveTab('dashboard'); // Pindah ke tab form
+    setActiveTab('dashboard'); 
     window.scrollTo(0, 0);
   };
 
@@ -174,7 +182,6 @@ function AdminWeb() {
   // --- TAMPILAN DASHBOARD ADMIN ---
   return (
     <div className="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col">
-      {/* HEADER & TABS */}
       <header className="bg-slate-800 border-b border-slate-700 p-6 shadow-md">
         <div className="max-w-7xl mx-auto flex justify-between items-center mb-6">
           <div>
@@ -192,7 +199,6 @@ function AdminWeb() {
           </div>
         </div>
         
-        {/* TAB MENU */}
         <div className="max-w-7xl mx-auto flex gap-2">
           <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-t-lg font-semibold transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>Monitor & Form</button>
           <button onClick={() => setActiveTab('members')} className={`px-4 py-2 rounded-t-lg font-semibold transition-colors ${activeTab === 'members' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>Manajemen Member</button>
@@ -201,7 +207,6 @@ function AdminWeb() {
       </header>
 
       <main className="max-w-7xl mx-auto p-6 w-full flex-1">
-        {/* TAB 1: DASHBOARD (FORM & LIVE) */}
         {activeTab === 'dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 lg:col-span-1 h-fit">
@@ -222,12 +227,19 @@ function AdminWeb() {
                   <label className="block text-sm font-medium text-slate-300 mb-1">Nama Pemilik</label>
                   <input type="text" name="nama" required value={formData.nama} onChange={handleInputChange} placeholder="Nama Lengkap" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
+                
+                {/* UPDATE: Kolom Input Telegram ID Baru */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">ID Telegram <span className="text-slate-500 text-xs font-normal">(Opsional)</span></label>
+                  <input type="text" name="telegram_chat_id" value={formData.telegram_chat_id} onChange={handleInputChange} placeholder="Contoh: 123456789" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+
                 <div className="flex gap-2 mt-2">
                   <button type="submit" className={`w-full font-semibold py-2.5 rounded-lg transition-colors ${editMode ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>
                     {editMode ? 'Update Data' : 'Simpan Data'}
                   </button>
                   {editMode && (
-                    <button type="button" onClick={() => { setEditMode(false); setFormData({ rfid_id: '', plat_nomor: '', nama: '' }); }} className="bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors">Batal</button>
+                    <button type="button" onClick={() => { setEditMode(false); setFormData({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' }); }} className="bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors">Batal</button>
                   )}
                 </div>
               </form>
@@ -276,6 +288,7 @@ function AdminWeb() {
                       <th className="p-3">UID RFID</th>
                       <th className="p-3">Plat Nomor</th>
                       <th className="p-3">Nama Lengkap</th>
+                      <th className="p-3">ID Telegram</th>
                       <th className="p-3 text-center">Aksi</th>
                     </tr>
                   </thead>
@@ -285,6 +298,9 @@ function AdminWeb() {
                         <td className="p-3 text-yellow-400 font-mono">{member.rfid_id}</td>
                         <td className="p-3 text-slate-300 tracking-wider font-semibold">{member.plat_nomor}</td>
                         <td className="p-3 text-white">{member.nama}</td>
+                        <td className="p-3 text-slate-400 font-mono text-xs">
+                          {member.telegram_chat_id ? <span className="text-blue-400">{member.telegram_chat_id}</span> : '-'}
+                        </td>
                         <td className="p-3 text-center">
                           <button onClick={() => editMember(member)} className="bg-blue-900/50 hover:bg-blue-600 text-blue-300 hover:text-white px-3 py-1 rounded mr-2 transition-colors">Edit</button>
                           <button onClick={() => deleteMember(member.rfid_id)} className="bg-red-900/50 hover:bg-red-600 text-red-300 hover:text-white px-3 py-1 rounded transition-colors">Hapus</button>
@@ -297,7 +313,7 @@ function AdminWeb() {
           </div>
         )}
 
-        {/* TAB 3: HISTORI PARKIR (YANG SUDAH KELUAR) */}
+        {/* TAB 3: HISTORI PARKIR */}
         {activeTab === 'history' && (
           <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
              <h2 className="text-xl font-semibold text-white border-b border-slate-600 pb-2 mb-4 flex justify-between items-center">
@@ -340,7 +356,7 @@ function AdminWeb() {
 }
 
 // =====================================================================
-// 2. WEB PENGGUNA (LAYAR VMS DI GERBANG) - TETAP SAMA
+// 2. WEB PENGGUNA (LAYAR VMS DI GERBANG)
 // =====================================================================
 function PublicWeb() {
   const [logs, setLogs] = useState([]);
