@@ -73,20 +73,22 @@ function AdminWeb() {
         }
       })
       // =====================================================================
-      // UPDATE: PENANGKAP KARTU BARU (PENDING RFID DARI ESP32)
+      // UPDATE: POPUP KARTU BARU MUNCUL & PINDAH KE TAB DASHBOARD
       // =====================================================================
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pending_rfid' }, (payload) => {
-        // 1. Paksa pindah ke tab dashboard (form pendaftaran)
+        // Pindah otomatis ke Dashboard agar Admin bisa langsung mengisi form
         setActiveTab('dashboard');
         
-        // 2. Isi kotak form UID secara otomatis
+        // Isi form dengan UID kartu yang baru saja ditolak gerbang
         setFormData(prev => ({ ...prev, rfid_id: payload.new.rfid_id }));
         
-        // 3. Tampilkan peringatan hijau ke Admin
-        setAlert({ show: true, msg: `Kartu Baru Terdeteksi (${payload.new.rfid_id})! Silakan lengkapi data.`, isSuccess: true });
+        // Munculkan Pop-up Notifikasi (Hanya di Dashboard)
+        setAlert({ show: true, msg: `📡 KARTU BARU TERDETEKSI: ${payload.new.rfid_id}. Silakan isi data di bawah!`, isSuccess: true });
+        
+        // Hilangkan alert setelah 7 detik
         setTimeout(() => setAlert({ show: false, msg: '', isSuccess: true }), 7000);
         
-        // 4. Hapus data dari tabel pending agar tidak nyangkut terus di server
+        // Bersihkan sampah dari database agar tidak menumpuk
         supabase.from('pending_rfid').delete().eq('id', payload.new.id).then();
       })
       .subscribe();
@@ -212,17 +214,24 @@ function AdminWeb() {
           </div>
         </div>
         
-        <div className="max-w-7xl mx-auto flex gap-2">
+        <div className="max-w-7xl mx-auto flex gap-2 relative">
           <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-t-lg font-semibold transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>Monitor & Form</button>
           <button onClick={() => setActiveTab('members')} className={`px-4 py-2 rounded-t-lg font-semibold transition-colors ${activeTab === 'members' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>Manajemen Member</button>
           <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-t-lg font-semibold transition-colors ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>Histori 24 Jam</button>
+          
+          {/* POPUP ALERT KHUSUS DI ATAS TAB */}
+          {alert.show && ( 
+             <div className={`absolute right-0 top-0 mt-[-10px] p-3 rounded-lg shadow-xl border ${alert.isSuccess ? 'bg-green-900 border-green-500 text-green-300' : 'bg-red-900 border-red-500 text-red-300'} animate-bounce`}>
+               {alert.msg}
+             </div> 
+          )}
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto p-6 w-full flex-1">
         {activeTab === 'dashboard' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 lg:col-span-1 h-fit">
+            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 lg:col-span-1 h-fit relative">
               <h2 className="text-xl font-semibold mb-4 text-white border-b border-slate-600 pb-2">
                 {editMode ? <span className="text-yellow-400">Edit Data Akses</span> : "Pendaftaran Akses"}
               </h2>
@@ -255,7 +264,6 @@ function AdminWeb() {
                   )}
                 </div>
               </form>
-              {alert.show && ( <div className={`mt-4 p-3 rounded text-sm ${alert.isSuccess ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>{alert.msg}</div> )}
             </div>
 
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 lg:col-span-2">
