@@ -10,7 +10,7 @@ const ADMIN_PIN = 'POLINES123'; // PIN untuk masuk ke Web Admin
 function AdminWeb() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, members, history
+  const [activeTab, setActiveTab] = useState('dashboard'); 
   
   const [logs, setLogs] = useState([]);
   const [membersList, setMembersList] = useState([]);
@@ -19,7 +19,6 @@ function AdminWeb() {
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState({ show: false, msg: '', isSuccess: true });
   
-  // UPDATE: Tambahkan telegram_chat_id ke dalam state form
   const [formData, setFormData] = useState({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' });
   const [editMode, setEditMode] = useState(false);
   const rfidInputRef = useRef(null);
@@ -73,6 +72,23 @@ function AdminWeb() {
            setLogs(prevLogs => prevLogs.map(log => log.id === payload.new.id ? updatedLogWithMember : log));
         }
       })
+      // =====================================================================
+      // UPDATE: PENANGKAP KARTU BARU (PENDING RFID DARI ESP32)
+      // =====================================================================
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pending_rfid' }, (payload) => {
+        // 1. Paksa pindah ke tab dashboard (form pendaftaran)
+        setActiveTab('dashboard');
+        
+        // 2. Isi kotak form UID secara otomatis
+        setFormData(prev => ({ ...prev, rfid_id: payload.new.rfid_id }));
+        
+        // 3. Tampilkan peringatan hijau ke Admin
+        setAlert({ show: true, msg: `Kartu Baru Terdeteksi (${payload.new.rfid_id})! Silakan lengkapi data.`, isSuccess: true });
+        setTimeout(() => setAlert({ show: false, msg: '', isSuccess: true }), 7000);
+        
+        // 4. Hapus data dari tabel pending agar tidak nyangkut terus di server
+        supabase.from('pending_rfid').delete().eq('id', payload.new.id).then();
+      })
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -111,7 +127,6 @@ function AdminWeb() {
     e.preventDefault();
     
     if (editMode) {
-      // UPDATE: Sertakan telegram_chat_id saat update
       const { error } = await supabase.from('members').update({ 
         plat_nomor: formData.plat_nomor, 
         nama: formData.nama,
@@ -126,7 +141,6 @@ function AdminWeb() {
         fetchMembers(); 
       }
     } else {
-      // INSERT DATA BARU (Otomatis memasukkan telegram_chat_id dari form)
       const { error } = await supabase.from('members').insert([formData]);
       if (error) showAlert('Gagal mendaftar. RFID/Plat mungkin sudah ada.', false);
       else {
@@ -137,7 +151,6 @@ function AdminWeb() {
     }
   };
 
-  // UPDATE: Ambil telegram_chat_id dari database saat mau diedit
   const editMember = (member) => {
     setFormData({ 
       rfid_id: member.rfid_id, 
@@ -228,7 +241,6 @@ function AdminWeb() {
                   <input type="text" name="nama" required value={formData.nama} onChange={handleInputChange} placeholder="Nama Lengkap" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 
-                {/* UPDATE: Kolom Input Telegram ID Baru */}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">ID Telegram <span className="text-slate-500 text-xs font-normal">(Opsional)</span></label>
                   <input type="text" name="telegram_chat_id" value={formData.telegram_chat_id} onChange={handleInputChange} placeholder="Contoh: 123456789" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -274,7 +286,6 @@ function AdminWeb() {
           </div>
         )}
 
-        {/* TAB 2: MANAJEMEN MEMBER */}
         {activeTab === 'members' && (
           <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
              <h2 className="text-xl font-semibold text-white border-b border-slate-600 pb-2 mb-4 flex justify-between">
@@ -313,7 +324,6 @@ function AdminWeb() {
           </div>
         )}
 
-        {/* TAB 3: HISTORI PARKIR */}
         {activeTab === 'history' && (
           <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
              <h2 className="text-xl font-semibold text-white border-b border-slate-600 pb-2 mb-4 flex justify-between items-center">
