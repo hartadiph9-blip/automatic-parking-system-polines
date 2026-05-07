@@ -19,7 +19,8 @@ function AdminWeb() {
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState({ show: false, msg: '', isSuccess: true });
   
-  const [formData, setFormData] = useState({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' });
+  // SCHEMA UPDATE: rfid_scanned, plate_scanned, name
+  const [formData, setFormData] = useState({ rfid_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
   const [editMode, setEditMode] = useState(false);
   const rfidInputRef = useRef(null);
 
@@ -57,8 +58,8 @@ function AdminWeb() {
     const channel = supabase.channel('admin-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'IN') {
-            const { data } = await supabase.from('members').select('nama').eq('rfid_id', payload.new.rfid_id).single();
-            const newLogWithMember = { ...payload.new, members: { nama: data ? data.nama : 'Tidak Terdaftar' } };
+            const { data } = await supabase.from('members').select('name').eq('rfid_scanned', payload.new.rfid_scanned).single();
+            const newLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
             setLogs(prevLogs => [newLogWithMember, ...prevLogs]);
         }
       })
@@ -67,8 +68,8 @@ function AdminWeb() {
         if (payload.new.status === 'OUT') {
            setLogs(prevLogs => prevLogs.filter(log => log.id !== payload.new.id));
         } else {
-           const { data } = await supabase.from('members').select('nama').eq('rfid_id', payload.new.rfid_id).single();
-           const updatedLogWithMember = { ...payload.new, members: { nama: data ? data.nama : 'Tidak Terdaftar' } };
+           const { data } = await supabase.from('members').select('name').eq('rfid_scanned', payload.new.rfid_scanned).single();
+           const updatedLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
            setLogs(prevLogs => prevLogs.map(log => log.id === payload.new.id ? updatedLogWithMember : log));
         }
       })
@@ -80,10 +81,10 @@ function AdminWeb() {
         setActiveTab('dashboard');
         
         // Isi form dengan UID kartu yang baru saja ditolak gerbang
-        setFormData(prev => ({ ...prev, rfid_id: payload.new.rfid_id }));
+        setFormData(prev => ({ ...prev, rfid_scanned: payload.new.rfid_scanned }));
         
         // Munculkan Pop-up Notifikasi (Hanya di Dashboard)
-        setAlert({ show: true, msg: `📡 KARTU BARU TERDETEKSI: ${payload.new.rfid_id}. Silakan isi data di bawah!`, isSuccess: true });
+        setAlert({ show: true, msg: `📡 KARTU BARU TERDETEKSI: ${payload.new.rfid_scanned}. Silakan isi data di bawah!`, isSuccess: true });
         
         // Hilangkan alert setelah 7 detik
         setTimeout(() => setAlert({ show: false, msg: '', isSuccess: true }), 7000);
@@ -99,7 +100,7 @@ function AdminWeb() {
   // --- FUNGSI PENGAMBILAN DATA ---
   const fetchInitialLogs = async () => {
     setLoading(true);
-    const { data } = await supabase.from('parking_logs').select('*, members(nama)').eq('status', 'IN').order('time_in', { ascending: false }); 
+    const { data } = await supabase.from('parking_logs').select('*, members(name)').eq('status', 'IN').order('time_in', { ascending: false }); 
     if (data) setLogs(data);
     setLoading(false);
   };
@@ -110,14 +111,14 @@ function AdminWeb() {
   };
 
   const fetchHistory = async () => {
-    const { data } = await supabase.from('parking_logs').select('*, members(nama)').eq('status', 'OUT').order('time_in', { ascending: false }).limit(100);
+    const { data } = await supabase.from('parking_logs').select('*, members(name)').eq('status', 'OUT').order('time_in', { ascending: false }).limit(100);
     if (data) setHistoryLogs(data);
   };
 
   // --- HANDLER FORM & EDIT ---
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: name === 'plat_nomor' ? value.toUpperCase() : value }));
+    setFormData(prev => ({ ...prev, [name]: name === 'plate_scanned' ? value.toUpperCase() : value }));
   };
 
   const showAlert = (msg, isSuccess) => {
@@ -130,16 +131,16 @@ function AdminWeb() {
     
     if (editMode) {
       const { error } = await supabase.from('members').update({ 
-        plat_nomor: formData.plat_nomor, 
-        nama: formData.nama,
+        plate_scanned: formData.plate_scanned, 
+        name: formData.name,
         telegram_chat_id: formData.telegram_chat_id
-      }).eq('rfid_id', formData.rfid_id);
+      }).eq('rfid_scanned', formData.rfid_scanned);
 
       if (error) showAlert('Gagal memperbarui data.', false);
       else {
         showAlert('Data member berhasil diperbarui!', true);
         setEditMode(false);
-        setFormData({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' });
+        setFormData({ rfid_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
         fetchMembers(); 
       }
     } else {
@@ -147,7 +148,7 @@ function AdminWeb() {
       if (error) showAlert('Gagal mendaftar. RFID/Plat mungkin sudah ada.', false);
       else {
         showAlert('Akses berhasil diverifikasi dan disimpan!', true);
-        setFormData({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' });
+        setFormData({ rfid_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
         fetchMembers();
       }
     }
@@ -155,9 +156,9 @@ function AdminWeb() {
 
   const editMember = (member) => {
     setFormData({ 
-      rfid_id: member.rfid_id, 
-      plat_nomor: member.plat_nomor, 
-      nama: member.nama,
+      rfid_scanned: member.rfid_scanned, 
+      plate_scanned: member.plate_scanned, 
+      name: member.name,
       telegram_chat_id: member.telegram_chat_id || '' 
     });
     setEditMode(true);
@@ -165,9 +166,9 @@ function AdminWeb() {
     window.scrollTo(0, 0);
   };
 
-  const deleteMember = async (rfid_id) => {
+  const deleteMember = async (rfid_scanned) => {
     if(window.confirm('Yakin ingin menghapus akses RFID ini?')) {
-      await supabase.from('members').delete().eq('rfid_id', rfid_id);
+      await supabase.from('members').delete().eq('rfid_scanned', rfid_scanned);
       showAlert('Member berhasil dihapus.', true);
       fetchMembers();
     }
@@ -238,16 +239,16 @@ function AdminWeb() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">UID RFID</label>
-                  <input type="text" name="rfid_id" required disabled={editMode} value={formData.rfid_id} onChange={handleInputChange} ref={rfidInputRef} placeholder="Tap kartu..." className={`w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none ${editMode ? 'opacity-50 cursor-not-allowed' : ''}`} />
+                  <input type="text" name="rfid_scanned" required disabled={editMode} value={formData.rfid_scanned} onChange={handleInputChange} ref={rfidInputRef} placeholder="Tap kartu..." className={`w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none ${editMode ? 'opacity-50 cursor-not-allowed' : ''}`} />
                   {editMode && <span className="text-xs text-slate-500">RFID tidak bisa diubah saat edit.</span>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Plat Nomor</label>
-                  <input type="text" name="plat_nomor" required value={formData.plat_nomor} onChange={handleInputChange} placeholder="Contoh: H 1234 AB" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white uppercase focus:ring-2 focus:ring-blue-500 outline-none" />
+                  <input type="text" name="plate_scanned" required value={formData.plate_scanned} onChange={handleInputChange} placeholder="Contoh: H 1234 AB" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white uppercase focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Nama Pemilik</label>
-                  <input type="text" name="nama" required value={formData.nama} onChange={handleInputChange} placeholder="Nama Lengkap" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                  <input type="text" name="name" required value={formData.name} onChange={handleInputChange} placeholder="Nama Lengkap" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 
                 <div>
@@ -260,7 +261,7 @@ function AdminWeb() {
                     {editMode ? 'Update Data' : 'Simpan Data'}
                   </button>
                   {editMode && (
-                    <button type="button" onClick={() => { setEditMode(false); setFormData({ rfid_id: '', plat_nomor: '', nama: '', telegram_chat_id: '' }); }} className="bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors">Batal</button>
+                    <button type="button" onClick={() => { setEditMode(false); setFormData({ rfid_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' }); }} className="bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors">Batal</button>
                   )}
                 </div>
               </form>
@@ -282,8 +283,8 @@ function AdminWeb() {
                     {loading ? <tr><td colSpan="4" className="p-4 text-center text-slate-500">Memuat...</td></tr> : logs.length === 0 ? <tr><td colSpan="4" className="p-4 text-center text-slate-500">Area parkir kosong.</td></tr> : logs.map(log => (
                       <tr key={log.id} className="hover:bg-slate-800/50">
                         <td className="p-3 text-slate-300 font-mono">{new Date(log.time_in).toLocaleTimeString('id-ID', { hour12: false })}</td>
-                        <td className="p-3 text-yellow-400 font-mono">{log.rfid_id}</td>
-                        <td className="p-3 text-white font-semibold">{log.members?.nama || "Tidak Terdaftar"}</td>
+                        <td className="p-3 text-yellow-400 font-mono">{log.rfid_scanned}</td>
+                        <td className="p-3 text-white font-semibold">{log.members?.name || "Tidak Terdaftar"}</td>
                         <td className="p-3"><span className="px-2 py-1 bg-blue-900/50 text-blue-400 rounded text-xs font-bold">PARKIR (IN)</span></td>
                       </tr>
                     ))}
@@ -313,16 +314,16 @@ function AdminWeb() {
                   </thead>
                   <tbody className="divide-y divide-slate-700">
                     {membersList.map(member => (
-                      <tr key={member.rfid_id} className="hover:bg-slate-800/50">
-                        <td className="p-3 text-yellow-400 font-mono">{member.rfid_id}</td>
-                        <td className="p-3 text-slate-300 tracking-wider font-semibold">{member.plat_nomor}</td>
-                        <td className="p-3 text-white">{member.nama}</td>
+                      <tr key={member.rfid_scanned} className="hover:bg-slate-800/50">
+                        <td className="p-3 text-yellow-400 font-mono">{member.rfid_scanned}</td>
+                        <td className="p-3 text-slate-300 tracking-wider font-semibold">{member.plate_scanned}</td>
+                        <td className="p-3 text-white">{member.name}</td>
                         <td className="p-3 text-slate-400 font-mono text-xs">
                           {member.telegram_chat_id ? <span className="text-blue-400">{member.telegram_chat_id}</span> : '-'}
                         </td>
                         <td className="p-3 text-center">
                           <button onClick={() => editMember(member)} className="bg-blue-900/50 hover:bg-blue-600 text-blue-300 hover:text-white px-3 py-1 rounded mr-2 transition-colors">Edit</button>
-                          <button onClick={() => deleteMember(member.rfid_id)} className="bg-red-900/50 hover:bg-red-600 text-red-300 hover:text-white px-3 py-1 rounded transition-colors">Hapus</button>
+                          <button onClick={() => deleteMember(member.rfid_scanned)} className="bg-red-900/50 hover:bg-red-600 text-red-300 hover:text-white px-3 py-1 rounded transition-colors">Hapus</button>
                         </td>
                       </tr>
                     ))}
@@ -357,8 +358,8 @@ function AdminWeb() {
                         <tr key={log.id} className="hover:bg-slate-800/50">
                           <td className="p-3 text-slate-300 font-mono">{new Date(log.time_in).toLocaleString('id-ID')}</td>
                           <td className="p-3 text-slate-400 font-mono">{log.time_out ? new Date(log.time_out).toLocaleString('id-ID') : '-'}</td>
-                          <td className="p-3 text-yellow-400 font-mono">{log.rfid_id}</td>
-                          <td className="p-3 text-white">{log.members?.nama || "Tamu"}</td>
+                          <td className="p-3 text-yellow-400 font-mono">{log.rfid_scanned}</td>
+                          <td className="p-3 text-white">{log.members?.name || "Tamu"}</td>
                           <td className="p-3"><span className="px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-bold border border-green-800">SELESAI (OUT)</span></td>
                         </tr>
                       ))
@@ -378,7 +379,7 @@ function AdminWeb() {
 // =====================================================================
 function PublicWeb() {
   const [logs, setLogs] = useState([]);
-  const [notify, setNotify] = useState({ show: false, type: '', nama: '', plat: '' });
+  const [notify, setNotify] = useState({ show: false, type: '', name: '', plate_scanned: '' });
   const timerRef = useRef(null);
 
   const availableSlots = Math.max(0, MAX_SLOTS - logs.length);
@@ -386,7 +387,7 @@ function PublicWeb() {
 
   useEffect(() => {
     const fetchSlotsAndData = async () => {
-      const { data } = await supabase.from('parking_logs').select('*, members(nama)').eq('status', 'IN').order('time_in', { ascending: false });
+      const { data } = await supabase.from('parking_logs').select('*, members(name)').eq('status', 'IN').order('time_in', { ascending: false });
       if (data) setLogs(data);
     };
     fetchSlotsAndData();
@@ -394,16 +395,16 @@ function PublicWeb() {
     const channel = supabase.channel('public-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'IN') {
-          const { data } = await supabase.from('members').select('nama').eq('rfid_id', payload.new.rfid_id).single();
-          const newLogWithMember = { ...payload.new, members: { nama: data ? data.nama : 'Tidak Terdaftar' } };
+          const { data } = await supabase.from('members').select('name').eq('rfid_scanned', payload.new.rfid_scanned).single();
+          const newLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
           setLogs(prev => [newLogWithMember, ...prev]); 
-          triggerNotification(payload.new.rfid_id, 'IN'); 
+          triggerNotification(payload.new.rfid_scanned, 'IN'); 
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'OUT') {
           setLogs(prev => prev.filter(log => log.id !== payload.new.id)); 
-          triggerNotification(payload.new.rfid_id, 'OUT'); 
+          triggerNotification(payload.new.rfid_scanned, 'OUT'); 
         }
       })
       .subscribe();
@@ -412,11 +413,11 @@ function PublicWeb() {
   }, []);
 
   const triggerNotification = async (rfid, type) => {
-    const { data } = await supabase.from('members').select('nama, plat_nomor').eq('rfid_id', rfid).single();
-    setNotify({ show: true, type: type, nama: data ? data.nama : 'Tamu Tak Dikenal', plat: data ? data.plat_nomor : '---' });
+    const { data } = await supabase.from('members').select('name, plate_scanned').eq('rfid_scanned', rfid).single();
+    setNotify({ show: true, type: type, name: data ? data.name : 'Tamu Tak Dikenal', plate_scanned: data ? data.plate_scanned : '---' });
 
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => { setNotify({ show: false, type: '', nama: '', plat: '' }); }, 7000);
+    timerRef.current = setTimeout(() => { setNotify({ show: false, type: '', name: '', plate_scanned: '' }); }, 7000);
   };
 
   return (
@@ -460,7 +461,7 @@ function PublicWeb() {
                     logs.map((log) => (
                       <tr key={log.id} className="transition-colors hover:bg-slate-800/50">
                         <td className="py-4 text-slate-300 font-mono text-xl">{new Date(log.time_in).toLocaleTimeString('id-ID', { hour12: false })}</td>
-                        <td className="py-4 font-bold text-white text-xl">{log.members?.nama || "Tamu"}</td>
+                        <td className="py-4 font-bold text-white text-xl">{log.members?.name || "Tamu"}</td>
                       </tr>
                     ))
                   )}
@@ -474,9 +475,9 @@ function PublicWeb() {
       <div className={`absolute inset-0 flex flex-col items-center justify-center bg-black transition-opacity duration-500 ${notify.show ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`}>
         <div className={`border-4 rounded-3xl p-16 text-center w-11/12 max-w-5xl shadow-[0_0_100px_rgba(0,0,0,0.8)] ${notify.type === 'IN' ? 'border-blue-500 bg-blue-950/20' : 'border-green-500 bg-green-950/20'}`}>
           <h2 className={`text-6xl md:text-7xl font-black mb-6 ${notify.type === 'IN' ? 'text-blue-400' : 'text-green-400'}`}>{notify.type === 'IN' ? 'SELAMAT DATANG' : 'TERIMA KASIH'}</h2>
-          <p className="text-4xl text-white font-medium mb-8">{notify.nama}</p>
+          <p className="text-4xl text-white font-medium mb-8">{notify.name}</p>
           <div className="bg-black border-4 border-slate-600 rounded-xl py-6 mx-auto w-fit px-16 mb-8">
-            <p className="text-7xl md:text-8xl font-mono font-bold text-yellow-400 tracking-widest">{notify.plat}</p>
+            <p className="text-7xl md:text-8xl font-mono font-bold text-yellow-400 tracking-widest">{notify.plate_scanned}</p>
           </div>
           <p className="text-3xl text-slate-400">{notify.type === 'IN' ? 'Palang terbuka, silakan masuk perlahan.' : 'Hati-hati di jalan, sampai jumpa kembali.'}</p>
         </div>
