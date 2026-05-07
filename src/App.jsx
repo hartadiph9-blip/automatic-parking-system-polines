@@ -19,8 +19,7 @@ function AdminWeb() {
   const [loading, setLoading] = useState(true);
   const [alert, setAlert] = useState({ show: false, msg: '', isSuccess: true });
   
-  // SCHEMA UPDATE: rfid_scanned, plate_scanned, name
-  const [formData, setFormData] = useState({ rfid_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
+  const [formData, setFormData] = useState({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
   const [editMode, setEditMode] = useState(false);
   const rfidInputRef = useRef(null);
 
@@ -40,11 +39,7 @@ function AdminWeb() {
 
   const autoDeleteOldLogs = async () => {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    await supabase.from('parking_logs')
-      .delete()
-      .eq('status', 'OUT') 
-      .lt('time_in', twentyFourHoursAgo); 
-    console.log("Pembersihan otomatis histori yang sudah lewat 24 jam berhasil.");
+    await supabase.from('parking_logs').delete().eq('status', 'OUT').lt('time_in', twentyFourHoursAgo); 
   };
 
   // --- EFEK UTAMA & REALTIME ---
@@ -58,7 +53,10 @@ function AdminWeb() {
     const channel = supabase.channel('admin-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'IN') {
-            const { data } = await supabase.from('members').select('name').eq('rfid_scanned', payload.new.rfid_scanned).single();
+            const matchColumn = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
+            const matchValue = payload.new[matchColumn];
+            
+            const { data } = await supabase.from('members').select('name').eq(matchColumn, matchValue).single();
             const newLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
             setLogs(prevLogs => [newLogWithMember, ...prevLogs]);
         }
@@ -68,28 +66,26 @@ function AdminWeb() {
         if (payload.new.status === 'OUT') {
            setLogs(prevLogs => prevLogs.filter(log => log.id !== payload.new.id));
         } else {
-           const { data } = await supabase.from('members').select('name').eq('rfid_scanned', payload.new.rfid_scanned).single();
+           const matchColumn = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
+           const { data } = await supabase.from('members').select('name').eq(matchColumn, payload.new[matchColumn]).single();
            const updatedLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
            setLogs(prevLogs => prevLogs.map(log => log.id === payload.new.id ? updatedLogWithMember : log));
         }
       })
-      // =====================================================================
-      // UPDATE: POPUP KARTU BARU MUNCUL & PINDAH KE TAB DASHBOARD
-      // =====================================================================
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pending_rfid' }, (payload) => {
-        // Pindah otomatis ke Dashboard agar Admin bisa langsung mengisi form
         setActiveTab('dashboard');
         
-        // Isi form dengan UID kartu yang baru saja ditolak gerbang
-        setFormData(prev => ({ ...prev, rfid_scanned: payload.new.rfid_scanned }));
+        const detectedId = payload.new.uhf_scanned || payload.new.rfid_scanned;
         
-        // Munculkan Pop-up Notifikasi (Hanya di Dashboard)
-        setAlert({ show: true, msg: `📡 KARTU BARU TERDETEKSI: ${payload.new.rfid_scanned}. Silakan isi data di bawah!`, isSuccess: true });
+        setFormData(prev => ({ 
+          ...prev, 
+          uhf_scanned: payload.new.uhf_scanned || prev.uhf_scanned,
+          rfid_scanned: payload.new.rfid_scanned || prev.rfid_scanned
+        }));
         
-        // Hilangkan alert setelah 7 detik
+        setAlert({ show: true, msg: `📡 TAG BARU TERDETEKSI: ${detectedId}. Silakan isi data di bawah!`, isSuccess: true });
         setTimeout(() => setAlert({ show: false, msg: '', isSuccess: true }), 7000);
         
-        // Bersihkan sampah dari database agar tidak menumpuk
         supabase.from('pending_rfid').delete().eq('id', payload.new.id).then();
       })
       .subscribe();
@@ -129,26 +125,31 @@ function AdminWeb() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (editMode) {
-      const { error } = await supabase.from('members').update({ 
-        plate_scanned: formData.plate_scanned, 
-        name: formData.name,
-        telegram_chat_id: formData.telegram_chat_id
-      }).eq('rfid_scanned', formData.rfid_scanned);
+    // PENYEMPURNAAN ENGINEERING (NULL-SAFETY): 
+    // Mencegah error "Duplicate Key" di Supabase akibat empty string ""
+    const submitData = {
+      rfid_scanned: formData.rfid_scanned.trim() === '' ? null : formData.rfid_scanned,
+      uhf_scanned: formData.uhf_scanned.trim() === '' ? null : formData.uhf_scanned,
+      plate_scanned: formData.plate_scanned,
+      name: formData.name,
+      telegram_chat_id: formData.telegram_chat_id.trim() === '' ? null : formData.telegram_chat_id
+    };
 
-      if (error) showAlert('Gagal memperbarui data.', false);
+    if (editMode && formData.id) {
+      const { error } = await supabase.from('members').update(submitData).eq('id', formData.id);
+      if (error) showAlert('Gagal memperbarui data. Pastikan UID tidak duplikat.', false);
       else {
         showAlert('Data member berhasil diperbarui!', true);
         setEditMode(false);
-        setFormData({ rfid_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
+        setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
         fetchMembers(); 
       }
     } else {
-      const { error } = await supabase.from('members').insert([formData]);
-      if (error) showAlert('Gagal mendaftar. RFID/Plat mungkin sudah ada.', false);
+      const { error } = await supabase.from('members').insert([submitData]);
+      if (error) showAlert('Gagal mendaftar. RFID/UHF mungkin sudah terdaftar.', false);
       else {
         showAlert('Akses berhasil diverifikasi dan disimpan!', true);
-        setFormData({ rfid_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
+        setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
         fetchMembers();
       }
     }
@@ -156,9 +157,11 @@ function AdminWeb() {
 
   const editMember = (member) => {
     setFormData({ 
-      rfid_scanned: member.rfid_scanned, 
-      plate_scanned: member.plate_scanned, 
-      name: member.name,
+      id: member.id, 
+      rfid_scanned: member.rfid_scanned || '', 
+      uhf_scanned: member.uhf_scanned || '',
+      plate_scanned: member.plate_scanned || '', 
+      name: member.name || '',
       telegram_chat_id: member.telegram_chat_id || '' 
     });
     setEditMode(true);
@@ -166,9 +169,9 @@ function AdminWeb() {
     window.scrollTo(0, 0);
   };
 
-  const deleteMember = async (rfid_scanned) => {
-    if(window.confirm('Yakin ingin menghapus akses RFID ini?')) {
-      await supabase.from('members').delete().eq('rfid_scanned', rfid_scanned);
+  const deleteMember = async (id) => {
+    if(window.confirm('Yakin ingin menghapus akses member ini?')) {
+      await supabase.from('members').delete().eq('id', id);
       showAlert('Member berhasil dihapus.', true);
       fetchMembers();
     }
@@ -237,13 +240,20 @@ function AdminWeb() {
                 {editMode ? <span className="text-yellow-400">Edit Data Akses</span> : "Pendaftaran Akses"}
               </h2>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">UID RFID</label>
-                  <input type="text" name="rfid_scanned" required disabled={editMode} value={formData.rfid_scanned} onChange={handleInputChange} ref={rfidInputRef} placeholder="Tap kartu..." className={`w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none ${editMode ? 'opacity-50 cursor-not-allowed' : ''}`} />
-                  {editMode && <span className="text-xs text-slate-500">RFID tidak bisa diubah saat edit.</span>}
+                {/* DUA KOLOM SENSOR: UHF DAN RFID CARD */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">UID UHF (Stiker)</label>
+                    <input type="text" name="uhf_scanned" value={formData.uhf_scanned} onChange={handleInputChange} placeholder="Otomatis terisi..." className={`w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-500 outline-none`} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">UID RFID (Kartu)</label>
+                    <input type="text" name="rfid_scanned" value={formData.rfid_scanned} onChange={handleInputChange} placeholder="Otomatis terisi..." className={`w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-500 outline-none`} />
+                  </div>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Plat Nomor</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">Plat Nomor Kendaraan</label>
                   <input type="text" name="plate_scanned" required value={formData.plate_scanned} onChange={handleInputChange} placeholder="Contoh: H 1234 AB" className="w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white uppercase focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
@@ -261,7 +271,7 @@ function AdminWeb() {
                     {editMode ? 'Update Data' : 'Simpan Data'}
                   </button>
                   {editMode && (
-                    <button type="button" onClick={() => { setEditMode(false); setFormData({ rfid_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' }); }} className="bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors">Batal</button>
+                    <button type="button" onClick={() => { setEditMode(false); setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' }); }} className="bg-slate-600 hover:bg-slate-500 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors">Batal</button>
                   )}
                 </div>
               </form>
@@ -274,7 +284,7 @@ function AdminWeb() {
                   <thead>
                     <tr className="bg-slate-900 text-slate-300 uppercase tracking-wide">
                       <th className="p-3">Waktu Masuk</th>
-                      <th className="p-3">UID RFID</th>
+                      <th className="p-3">Tag/Kartu Terpakai</th>
                       <th className="p-3">Nama Pemilik</th>
                       <th className="p-3">Status</th>
                     </tr>
@@ -283,7 +293,7 @@ function AdminWeb() {
                     {loading ? <tr><td colSpan="4" className="p-4 text-center text-slate-500">Memuat...</td></tr> : logs.length === 0 ? <tr><td colSpan="4" className="p-4 text-center text-slate-500">Area parkir kosong.</td></tr> : logs.map(log => (
                       <tr key={log.id} className="hover:bg-slate-800/50">
                         <td className="p-3 text-slate-300 font-mono">{new Date(log.time_in).toLocaleTimeString('id-ID', { hour12: false })}</td>
-                        <td className="p-3 text-yellow-400 font-mono">{log.rfid_scanned}</td>
+                        <td className="p-3 text-yellow-400 font-mono">{log.uhf_scanned || log.rfid_scanned}</td>
                         <td className="p-3 text-white font-semibold">{log.members?.name || "Tidak Terdaftar"}</td>
                         <td className="p-3"><span className="px-2 py-1 bg-blue-900/50 text-blue-400 rounded text-xs font-bold">PARKIR (IN)</span></td>
                       </tr>
@@ -305,6 +315,7 @@ function AdminWeb() {
                 <table className="w-full text-left border-collapse text-sm">
                   <thead>
                     <tr className="bg-slate-900 text-slate-300 uppercase tracking-wide">
+                      <th className="p-3">UID UHF</th>
                       <th className="p-3">UID RFID</th>
                       <th className="p-3">Plat Nomor</th>
                       <th className="p-3">Nama Lengkap</th>
@@ -314,16 +325,15 @@ function AdminWeb() {
                   </thead>
                   <tbody className="divide-y divide-slate-700">
                     {membersList.map(member => (
-                      <tr key={member.rfid_scanned} className="hover:bg-slate-800/50">
-                        <td className="p-3 text-yellow-400 font-mono">{member.rfid_scanned}</td>
+                      <tr key={member.id} className="hover:bg-slate-800/50">
+                        <td className="p-3 text-blue-400 font-mono">{member.uhf_scanned || '-'}</td>
+                        <td className="p-3 text-yellow-400 font-mono">{member.rfid_scanned || '-'}</td>
                         <td className="p-3 text-slate-300 tracking-wider font-semibold">{member.plate_scanned}</td>
                         <td className="p-3 text-white">{member.name}</td>
-                        <td className="p-3 text-slate-400 font-mono text-xs">
-                          {member.telegram_chat_id ? <span className="text-blue-400">{member.telegram_chat_id}</span> : '-'}
-                        </td>
+                        <td className="p-3 text-slate-400 font-mono text-xs">{member.telegram_chat_id || '-'}</td>
                         <td className="p-3 text-center">
                           <button onClick={() => editMember(member)} className="bg-blue-900/50 hover:bg-blue-600 text-blue-300 hover:text-white px-3 py-1 rounded mr-2 transition-colors">Edit</button>
-                          <button onClick={() => deleteMember(member.rfid_scanned)} className="bg-red-900/50 hover:bg-red-600 text-red-300 hover:text-white px-3 py-1 rounded transition-colors">Hapus</button>
+                          <button onClick={() => deleteMember(member.id)} className="bg-red-900/50 hover:bg-red-600 text-red-300 hover:text-white px-3 py-1 rounded transition-colors">Hapus</button>
                         </td>
                       </tr>
                     ))}
@@ -345,7 +355,7 @@ function AdminWeb() {
                     <tr className="bg-slate-900 text-slate-300 uppercase tracking-wide">
                       <th className="p-3">Waktu Masuk</th>
                       <th className="p-3">Waktu Keluar</th>
-                      <th className="p-3">UID RFID</th>
+                      <th className="p-3">Tag Digunakan</th>
                       <th className="p-3">Nama Pemilik</th>
                       <th className="p-3">Status Akhir</th>
                     </tr>
@@ -358,7 +368,7 @@ function AdminWeb() {
                         <tr key={log.id} className="hover:bg-slate-800/50">
                           <td className="p-3 text-slate-300 font-mono">{new Date(log.time_in).toLocaleString('id-ID')}</td>
                           <td className="p-3 text-slate-400 font-mono">{log.time_out ? new Date(log.time_out).toLocaleString('id-ID') : '-'}</td>
-                          <td className="p-3 text-yellow-400 font-mono">{log.rfid_scanned}</td>
+                          <td className="p-3 text-yellow-400 font-mono">{log.uhf_scanned || log.rfid_scanned}</td>
                           <td className="p-3 text-white">{log.members?.name || "Tamu"}</td>
                           <td className="p-3"><span className="px-2 py-1 bg-green-900/50 text-green-400 rounded text-xs font-bold border border-green-800">SELESAI (OUT)</span></td>
                         </tr>
@@ -395,16 +405,20 @@ function PublicWeb() {
     const channel = supabase.channel('public-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'IN') {
-          const { data } = await supabase.from('members').select('name').eq('rfid_scanned', payload.new.rfid_scanned).single();
+          const matchColumn = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
+          const matchValue = payload.new[matchColumn];
+          
+          const { data } = await supabase.from('members').select('name').eq(matchColumn, matchValue).single();
           const newLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
           setLogs(prev => [newLogWithMember, ...prev]); 
-          triggerNotification(payload.new.rfid_scanned, 'IN'); 
+          triggerNotification(matchValue, matchColumn, 'IN'); 
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'OUT') {
           setLogs(prev => prev.filter(log => log.id !== payload.new.id)); 
-          triggerNotification(payload.new.rfid_scanned, 'OUT'); 
+          const matchColumn = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
+          triggerNotification(payload.new[matchColumn], matchColumn, 'OUT'); 
         }
       })
       .subscribe();
@@ -412,8 +426,8 @@ function PublicWeb() {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  const triggerNotification = async (rfid, type) => {
-    const { data } = await supabase.from('members').select('name, plate_scanned').eq('rfid_scanned', rfid).single();
+  const triggerNotification = async (scannedId, columnType, type) => {
+    const { data } = await supabase.from('members').select('name, plate_scanned').eq(columnType, scannedId).single();
     setNotify({ show: true, type: type, name: data ? data.name : 'Tamu Tak Dikenal', plate_scanned: data ? data.plate_scanned : '---' });
 
     if (timerRef.current) clearTimeout(timerRef.current);
