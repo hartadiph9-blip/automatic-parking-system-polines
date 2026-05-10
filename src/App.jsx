@@ -5,6 +5,23 @@ const MAX_SLOTS = 6; // Batas maksimal parkir
 const ADMIN_PIN = 'POLINES123'; // PIN untuk masuk ke Web Admin
 
 // =====================================================================
+// FUNGSI BANTUAN: MENGGABUNGKAN LOG PARKIR DENGAN NAMA MEMBER
+// =====================================================================
+const enrichLogsWithMembers = async (logsData) => {
+  return await Promise.all(logsData.map(async (log) => {
+    const matchCol = log.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
+    const matchVal = log[matchCol];
+    let memName = 'Tidak Terdaftar';
+    
+    if (matchVal) {
+      const { data } = await supabase.from('members').select('name').eq(matchCol, matchVal).single();
+      if (data) memName = data.name;
+    }
+    return { ...log, members: { name: memName } };
+  }));
+};
+
+// =====================================================================
 // 1. WEB ADMIN (PENDAFTARAN, MONITORING, EDIT & HISTORI)
 // =====================================================================
 function AdminWeb() {
@@ -25,7 +42,6 @@ function AdminWeb() {
 
   const availableSlots = Math.max(0, MAX_SLOTS - logs.length);
 
-  // --- LOGIKA LOGIN & AUTO CLEANUP ---
   const handleLogin = (e) => {
     e.preventDefault();
     if (pinInput === ADMIN_PIN) {
@@ -42,7 +58,6 @@ function AdminWeb() {
     await supabase.from('parking_logs').delete().eq('status', 'OUT').lt('time_in', twentyFourHoursAgo); 
   };
 
-  // --- EFEK UTAMA & REALTIME ---
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -53,12 +68,8 @@ function AdminWeb() {
     const channel = supabase.channel('admin-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'IN') {
-            const matchColumn = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
-            const matchValue = payload.new[matchColumn];
-            
-            const { data } = await supabase.from('members').select('name').eq(matchColumn, matchValue).single();
-            const newLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
-            setLogs(prevLogs => [newLogWithMember, ...prevLogs]);
+            const enrichedArray = await enrichLogsWithMembers([payload.new]);
+            setLogs(prevLogs => [enrichedArray[0], ...prevLogs]);
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
@@ -66,15 +77,12 @@ function AdminWeb() {
         if (payload.new.status === 'OUT') {
            setLogs(prevLogs => prevLogs.filter(log => log.id !== payload.new.id));
         } else {
-           const matchColumn = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
-           const { data } = await supabase.from('members').select('name').eq(matchColumn, payload.new[matchColumn]).single();
-           const updatedLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
-           setLogs(prevLogs => prevLogs.map(log => log.id === payload.new.id ? updatedLogWithMember : log));
+           const enrichedArray = await enrichLogsWithMembers([payload.new]);
+           setLogs(prevLogs => prevLogs.map(log => log.id === payload.new.id ? enrichedArray[0] : log));
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pending_rfid' }, (payload) => {
         setActiveTab('dashboard');
-        
         const detectedId = payload.new.uhf_scanned || payload.new.rfid_scanned;
         
         setFormData(prev => ({ 
@@ -85,7 +93,6 @@ function AdminWeb() {
         
         setAlert({ show: true, msg: `📡 TAG BARU TERDETEKSI: ${detectedId}. Silakan isi data di bawah!`, isSuccess: true });
         setTimeout(() => setAlert({ show: false, msg: '', isSuccess: true }), 7000);
-        
         supabase.from('pending_rfid').delete().eq('id', payload.new.id).then();
       })
       .subscribe();
@@ -93,11 +100,15 @@ function AdminWeb() {
     return () => supabase.removeChannel(channel);
   }, [isAuthenticated]);
 
-  // --- FUNGSI PENGAMBILAN DATA ---
   const fetchInitialLogs = async () => {
     setLoading(true);
-    const { data } = await supabase.from('parking_logs').select('*, members(name)').eq('status', 'IN').order('time_in', { ascending: false }); 
-    if (data) setLogs(data);
+    // PERBAIKAN: Mengambil data utama dulu, baru digabung dengan nama member
+    const { data, error } = await supabase.from('parking_logs').select('*').eq('status', 'IN').order('time_in', { ascending: false }); 
+    if (error) console.error("Gagal memuat log IN:", error);
+    if (data) {
+      const enrichedData = await enrichLogsWithMembers(data);
+      setLogs(enrichedData);
+    }
     setLoading(false);
   };
 
@@ -107,11 +118,13 @@ function AdminWeb() {
   };
 
   const fetchHistory = async () => {
-    const { data } = await supabase.from('parking_logs').select('*, members(name)').eq('status', 'OUT').order('time_in', { ascending: false }).limit(100);
-    if (data) setHistoryLogs(data);
+    const { data } = await supabase.from('parking_logs').select('*').eq('status', 'OUT').order('time_in', { ascending: false }).limit(100);
+    if (data) {
+      const enrichedData = await enrichLogsWithMembers(data);
+      setHistoryLogs(enrichedData);
+    }
   };
 
-  // --- HANDLER FORM & EDIT ---
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: name === 'plate_scanned' ? value.toUpperCase() : value }));
@@ -124,9 +137,6 @@ function AdminWeb() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // PENYEMPURNAAN ENGINEERING (NULL-SAFETY): 
-    // Mencegah error "Duplicate Key" di Supabase akibat empty string ""
     const submitData = {
       rfid_scanned: formData.rfid_scanned.trim() === '' ? null : formData.rfid_scanned,
       uhf_scanned: formData.uhf_scanned.trim() === '' ? null : formData.uhf_scanned,
@@ -177,7 +187,6 @@ function AdminWeb() {
     }
   };
 
-  // --- TAMPILAN LOGIN SCREEN ---
   if (!isAuthenticated) {
     return (
       <div className="bg-slate-900 min-h-screen flex items-center justify-center text-white font-sans">
@@ -198,7 +207,6 @@ function AdminWeb() {
     );
   }
 
-  // --- TAMPILAN DASHBOARD ADMIN ---
   return (
     <div className="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col">
       <header className="bg-slate-800 border-b border-slate-700 p-6 shadow-md">
@@ -223,7 +231,6 @@ function AdminWeb() {
           <button onClick={() => setActiveTab('members')} className={`px-4 py-2 rounded-t-lg font-semibold transition-colors ${activeTab === 'members' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>Manajemen Member</button>
           <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-t-lg font-semibold transition-colors ${activeTab === 'history' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>Histori 24 Jam</button>
           
-          {/* POPUP ALERT KHUSUS DI ATAS TAB */}
           {alert.show && ( 
              <div className={`absolute right-0 top-0 mt-[-10px] p-3 rounded-lg shadow-xl border ${alert.isSuccess ? 'bg-green-900 border-green-500 text-green-300' : 'bg-red-900 border-red-500 text-red-300'} animate-bounce`}>
                {alert.msg}
@@ -240,7 +247,6 @@ function AdminWeb() {
                 {editMode ? <span className="text-yellow-400">Edit Data Akses</span> : "Pendaftaran Akses"}
               </h2>
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* DUA KOLOM SENSOR: UHF DAN RFID CARD */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">UID UHF (Stiker)</label>
@@ -397,28 +403,31 @@ function PublicWeb() {
 
   useEffect(() => {
     const fetchSlotsAndData = async () => {
-      const { data } = await supabase.from('parking_logs').select('*, members(name)').eq('status', 'IN').order('time_in', { ascending: false });
-      if (data) setLogs(data);
+      // PERBAIKAN: Tarik data log, lalu sambungkan secara manual
+      const { data } = await supabase.from('parking_logs').select('*').eq('status', 'IN').order('time_in', { ascending: false });
+      if (data) {
+        const enrichedData = await enrichLogsWithMembers(data);
+        setLogs(enrichedData);
+      }
     };
     fetchSlotsAndData();
 
     const channel = supabase.channel('public-channel')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'IN') {
-          const matchColumn = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
-          const matchValue = payload.new[matchColumn];
+          const matchCol = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
+          const matchVal = payload.new[matchCol];
           
-          const { data } = await supabase.from('members').select('name').eq(matchColumn, matchValue).single();
-          const newLogWithMember = { ...payload.new, members: { name: data ? data.name : 'Tidak Terdaftar' } };
-          setLogs(prev => [newLogWithMember, ...prev]); 
-          triggerNotification(matchValue, matchColumn, 'IN'); 
+          const enrichedArray = await enrichLogsWithMembers([payload.new]);
+          setLogs(prev => [enrichedArray[0], ...prev]); 
+          triggerNotification(matchVal, matchCol, 'IN'); 
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
         if (payload.new.status === 'OUT') {
           setLogs(prev => prev.filter(log => log.id !== payload.new.id)); 
-          const matchColumn = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
-          triggerNotification(payload.new[matchColumn], matchColumn, 'OUT'); 
+          const matchCol = payload.new.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
+          triggerNotification(payload.new[matchCol], matchCol, 'OUT'); 
         }
       })
       .subscribe();
@@ -427,8 +436,18 @@ function PublicWeb() {
   }, []);
 
   const triggerNotification = async (scannedId, columnType, type) => {
-    const { data } = await supabase.from('members').select('name, plate_scanned').eq(columnType, scannedId).single();
-    setNotify({ show: true, type: type, name: data ? data.name : 'Tamu Tak Dikenal', plate_scanned: data ? data.plate_scanned : '---' });
+    let notifyName = 'Tamu Tak Dikenal';
+    let notifyPlate = '---';
+
+    if (scannedId) {
+      const { data } = await supabase.from('members').select('name, plate_scanned').eq(columnType, scannedId).single();
+      if (data) {
+        notifyName = data.name;
+        notifyPlate = data.plate_scanned;
+      }
+    }
+
+    setNotify({ show: true, type: type, name: notifyName, plate_scanned: notifyPlate });
 
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => { setNotify({ show: false, type: '', name: '', plate_scanned: '' }); }, 7000);
