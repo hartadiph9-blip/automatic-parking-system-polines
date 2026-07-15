@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 
-const MAX_SLOTS = 6; // Batas maksimal parkir
+const MAX_SLOTS = 10; // Batas maksimal parkir
 const ADMIN_PIN = 'POLINES123'; // PIN untuk masuk ke Web Admin
 
 // =====================================================================
@@ -12,7 +12,7 @@ const enrichLogsWithMembers = async (logsData) => {
     const matchCol = log.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
     const matchVal = log[matchCol];
     let memName = 'Tidak Terdaftar';
-    
+    ``
     if (matchVal) {
       const { data } = await supabase.from('members').select('name').eq(matchCol, matchVal).single();
       if (data) memName = data.name;
