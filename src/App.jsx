@@ -25,7 +25,7 @@ const enrichLogsWithMembers = async (logsData) => {
 };
 
 // =====================================================================
-// 1. WEB ADMIN (LAYOUT SIDEBAR KIRI)
+// 1. WEB ADMIN (LAYOUT SIDEBAR KIRI PROFESIONAL)
 // =====================================================================
 function AdminWeb() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -84,7 +84,8 @@ function AdminWeb() {
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pending_rfid' }, (payload) => {
-        setActiveTab('dashboard');
+        // [BARU] Otomatis alihkan tab ke halaman Pendaftaran saat ada kartu asing di-tap
+        setActiveTab('register');
         const detectedId = payload.new.uhf_scanned || payload.new.rfid_scanned;
         setFormData(prev => ({ 
           ...prev, 
@@ -148,14 +149,16 @@ function AdminWeb() {
         showAlert('Data member diperbarui!', true);
         setEditMode(false);
         setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
+        setActiveTab('members'); // Alihkan kembali ke daftar member setelah edit selesai
         fetchMembers(); 
       }
     } else {
       const { error } = await supabase.from('members').insert([submitData]);
       if (error) showAlert('Gagal mendaftar. RFID/UHF mungkin sudah ada.', false);
       else {
-        showAlert('Berhasil mendaftarkan akses!', true);
+        showAlert('Berhasil mendaftarkan akses member baru!', true);
         setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
+        setActiveTab('members'); // Alihkan ke daftar member untuk melihat hasilnya
         fetchMembers();
       }
     }
@@ -172,6 +175,7 @@ function AdminWeb() {
     else {
       showAlert('Tamu manual berhasil dimasukkan!', true);
       setManualData({ name: '', purpose: '' });
+      setActiveTab('dashboard'); // Kembali ke live monitor agar terlihat langsung
     }
   };
 
@@ -188,7 +192,8 @@ function AdminWeb() {
       id: member.id, rfid_scanned: member.rfid_scanned || '', uhf_scanned: member.uhf_scanned || '',
       plate_scanned: member.plate_scanned || '', name: member.name || '', telegram_chat_id: member.telegram_chat_id || '' 
     });
-    setEditMode(true); setActiveTab('dashboard');
+    setEditMode(true); 
+    setActiveTab('register'); // [BARU] Buka tab registrasi saat tombol edit ditekan
   };
 
   const deleteMember = async (id) => {
@@ -198,9 +203,7 @@ function AdminWeb() {
     }
   };
 
-  // ----------------------------------------------------
   // TAMPILAN LOGIN ADMIN
-  // ----------------------------------------------------
   if (!isAuthenticated) {
     return (
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-black min-h-screen flex items-center justify-center text-white font-sans relative overflow-hidden">
@@ -220,13 +223,11 @@ function AdminWeb() {
     );
   }
 
-  // ----------------------------------------------------
-  // TAMPILAN DASHBOARD ADMIN (DENGAN SIDEBAR KIRI)
-  // ----------------------------------------------------
+  // TAMPILAN DASHBOARD ADMIN
   return (
     <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-black text-slate-100 font-sans h-screen flex overflow-hidden animate-fade-in">
       
-      {/* 📌 SIDEBAR KIRI */}
+      {/* 📌 SIDEBAR NAVIGASI KIRI */}
       <aside className="w-72 glass-panel border-r border-slate-700/50 flex flex-col relative z-20 shadow-2xl flex-shrink-0">
         <div className="p-6 border-b border-slate-700/50 text-center">
           <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 tracking-wide mt-2">SCADA PARKIR</h1>
@@ -235,7 +236,12 @@ function AdminWeb() {
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
           <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'dashboard' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
-            <span className="text-xl">📡</span> Monitor & Form
+            <span className="text-xl">📺</span> Live Monitor
+          </button>
+          
+          {/* [BARU] TAB PENDAFTARAN DI SIDEBAR KIRI */}
+          <button onClick={() => setActiveTab('register')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'register' ? 'bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-lg shadow-teal-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
+            <span className="text-xl">➕</span> Pendaftaran Member
           </button>
           
           <button onClick={() => setActiveTab('manual')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'manual' ? 'bg-gradient-to-r from-purple-600 to-pink-500 text-white shadow-lg shadow-purple-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
@@ -258,13 +264,13 @@ function AdminWeb() {
         </div>
       </aside>
 
-      {/* 📌 KONTEN UTAMA (KANAN) */}
+      {/* 📌 AREA KONTEN KANAN */}
       <main className="flex-1 flex flex-col h-screen relative overflow-hidden bg-gradient-to-br from-slate-900/50 to-black">
         
-        {/* Header Atas (Top Bar) */}
+        {/* Top Bar (Header Kanan) */}
         <header className="p-6 flex justify-between items-center border-b border-slate-800/50 glass-panel">
           <div className="flex items-center gap-3">
-             <span className="text-slate-400 font-medium">Status Sistem:</span>
+             <span className="text-slate-400 font-medium">Status Gateway:</span>
              <span className="flex items-center gap-2 bg-green-900/30 text-green-400 border border-green-800/50 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-pulse">
                <span className="w-2 h-2 rounded-full bg-green-400"></span> Online
              </span>
@@ -279,7 +285,7 @@ function AdminWeb() {
             )}
             
             <div className="bg-slate-800/80 border border-slate-700/50 px-5 py-2 rounded-xl text-center shadow-inner flex items-center gap-4">
-              <span className="text-xs text-slate-400 uppercase font-semibold tracking-wider">Sisa Slot Area</span>
+              <span className="text-xs text-slate-400 uppercase font-semibold tracking-wider">Slot Tersedia</span>
               <span className={`text-2xl font-black ${availableSlots === 0 ? 'text-red-500 animate-pulse' : 'text-green-400'}`}>
                 {availableSlots} <span className="text-slate-600 text-lg font-medium">/ {MAX_SLOTS}</span>
               </span>
@@ -287,62 +293,93 @@ function AdminWeb() {
           </div>
         </header>
 
-        {/* Area Konten Dinamis yang bisa di-scroll */}
+        {/* Konten Kontainer Dinamis */}
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
           
-          {/* TAB: DASHBOARD (Monitor & Form) */}
+          {/* TAB: LIVE MONITOR (Tabel Penuh) */}
           {activeTab === 'dashboard' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
-              {/* Form Pendaftaran */}
-              <div className="glass-panel rounded-2xl p-6 lg:col-span-1 h-fit shadow-xl border border-slate-700/50">
-                <h2 className="text-lg font-bold mb-6 text-white border-b border-slate-700 pb-3 flex items-center gap-2">
-                  {editMode ? <span className="text-yellow-400">✏️ Edit Data Akses</span> : "➕ Pendaftaran Akses"}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">UID UHF</label><input type="text" name="uhf_scanned" value={formData.uhf_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2.5 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all text-sm font-mono text-blue-300" /></div>
-                    <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">UID RFID</label><input type="text" name="rfid_scanned" value={formData.rfid_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2.5 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all text-sm font-mono text-cyan-300" /></div>
+            <div className="glass-panel rounded-2xl p-6 shadow-xl border border-slate-700/50 flex flex-col h-[calc(100vh-160px)] animate-fade-in">
+              <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4 flex items-center gap-2">🚗 Kendaraan di Dalam Area (Live)</h2>
+              <div className="overflow-auto rounded-lg border border-slate-700/50 flex-1 custom-scrollbar">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="sticky top-0 bg-slate-800/90 backdrop-blur-md z-10 shadow-sm">
+                    <tr className="text-slate-300 uppercase tracking-wider text-xs font-semibold">
+                      <th className="p-4">Waktu Masuk</th><th className="p-4">Tag / Keperluan</th><th className="p-4">Pemilik</th><th className="p-4 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {loading ? (
+                       <tr><td colSpan="4" className="p-12 text-center text-slate-400 animate-pulse">Memuat data parkir...</td></tr>
+                    ) : logs.length === 0 ? (
+                       <tr><td colSpan="4" className="p-12 text-center text-slate-400">Tidak ada kendaraan di dalam area.</td></tr>
+                    ) : logs.map(log => (
+                      <tr key={log.id} className="hover:bg-slate-800/50 transition-colors group">
+                        <td className="p-4 text-slate-300 font-mono text-xs">{new Date(log.time_in).toLocaleTimeString('id-ID', { hour12: false })}</td>
+                        <td className="p-4 font-mono text-xs">{log.is_manual ? <span className="text-purple-300 bg-purple-900/40 px-2 py-1 rounded-md border border-purple-500/30">📝 {log.purpose}</span> : <span className="text-yellow-400 font-bold tracking-wider">{log.uhf_scanned || log.rfid_scanned}</span>}</td>
+                        <td className="p-4 text-white font-medium">
+                           {log.members?.name} {log.is_manual && <span className="ml-2 text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300 font-semibold uppercase">Tamu</span>}
+                        </td>
+                        <td className="p-4 text-center">
+                          <button onClick={() => handleCheckout(log.id)} className="bg-red-900/30 text-red-400 border border-red-800/50 hover:bg-red-600 hover:text-white px-4 py-1.5 rounded-lg transition-all active:scale-95 text-xs font-bold opacity-50 group-hover:opacity-100">Checkout</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* [BARU] TAB: FORM PENDAFTARAN MEMBER (MANDIRI) */}
+          {activeTab === 'register' && (
+            <div className="max-w-2xl mx-auto animate-pop-in mt-4">
+              <div className="glass-panel rounded-3xl p-10 border border-slate-700/50 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-teal-600/10 rounded-full blur-[80px] -z-10"></div>
+                
+                <div className="flex items-center gap-4 mb-8 border-b border-slate-700 pb-5">
+                  <div className="bg-gradient-to-br from-teal-500 to-emerald-500 p-4 rounded-2xl shadow-lg shadow-teal-500/30">
+                    <span className="text-2xl text-white">➕</span>
                   </div>
-                  <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">Plat Nomor Kendaraan</label><input type="text" name="plate_scanned" required value={formData.plate_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 uppercase focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all font-mono font-bold tracking-widest text-lg" /></div>
-                  <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">Nama Lengkap</label><input type="text" name="name" required value={formData.name} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all" /></div>
-                  <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">ID Telegram <span className="font-normal opacity-50">(Opsional)</span></label><input type="text" name="telegram_chat_id" value={formData.telegram_chat_id} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all font-mono text-sm" /></div>
-                  <div className="flex gap-3 pt-2">
-                    <button type="submit" className={`flex-1 py-3 rounded-lg font-bold transition-all active:scale-95 shadow-lg ${editMode ? 'bg-gradient-to-r from-yellow-600 to-orange-500 shadow-yellow-600/20' : 'bg-gradient-to-r from-blue-600 to-cyan-500 shadow-blue-500/20'} text-white`}>{editMode ? 'Update Data' : 'Simpan Data'}</button>
-                    {editMode && <button type="button" onClick={() => setEditMode(false)} className="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-5 rounded-lg transition-all active:scale-95">Batal</button>}
+                  <div>
+                    <h2 className="text-2xl font-black text-white tracking-wide">
+                      {editMode ? <span className="text-yellow-400">Edit Akses Member</span> : "Pendaftaran Akses Member"}
+                    </h2>
+                    <p className="text-sm text-slate-400 mt-1">Registrasi tag RFID/UHF baru atau ubah data profil terdaftar.</p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">UID UHF (Stiker Kaca)</label>
+                      <input type="text" name="uhf_scanned" value={formData.uhf_scanned} onChange={handleInputChange} placeholder="Scan otomatis..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30 outline-none transition-all font-mono text-teal-300 font-bold" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-300 mb-2">UID RFID (Kartu Tap)</label>
+                      <input type="text" name="rfid_scanned" value={formData.rfid_scanned} onChange={handleInputChange} placeholder="Tap otomatis..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30 outline-none transition-all font-mono text-cyan-300 font-bold" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">Plat Nomor Kendaraan</label>
+                    <input type="text" name="plate_scanned" required value={formData.plate_scanned} onChange={handleInputChange} placeholder="H 1234 AB" className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white uppercase focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30 outline-none transition-all font-mono font-bold tracking-widest text-xl text-yellow-400" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">Nama Lengkap Pemilik</label>
+                    <input type="text" name="name" required value={formData.name} onChange={handleInputChange} placeholder="Nama Lengkap Pemilik..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30 outline-none transition-all font-medium" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">ID Telegram Chat <span className="font-normal opacity-50">(Opsional untuk Log Keluar)</span></label>
+                    <input type="text" name="telegram_chat_id" value={formData.telegram_chat_id} onChange={handleInputChange} placeholder="Contoh: 84522645..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30 outline-none transition-all font-mono" />
+                  </div>
+                  <div className="flex gap-4 pt-2">
+                    <button type="submit" className={`flex-1 font-black text-lg py-4 rounded-xl transition-all active:scale-95 shadow-xl ${editMode ? 'bg-gradient-to-r from-yellow-600 to-orange-500 shadow-yellow-600/30' : 'bg-gradient-to-r from-teal-600 to-emerald-600 shadow-teal-500/30'} text-white`}>
+                      {editMode ? '💾 Perbarui Data Member' : '➕ Daftarkan Member Baru'}
+                    </button>
+                    {editMode && (
+                      <button type="button" onClick={() => { setEditMode(false); setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' }); setActiveTab('members'); }} className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-xl transition-all active:scale-95">Batal</button>
+                    )}
                   </div>
                 </form>
-              </div>
-              
-              {/* Tabel Live Monitor */}
-              <div className="glass-panel rounded-2xl p-6 lg:col-span-2 shadow-xl border border-slate-700/50 flex flex-col h-full">
-                <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4 flex items-center gap-2">🚗 Kendaraan di Dalam Area (Live)</h2>
-                <div className="overflow-auto rounded-lg border border-slate-700/50 flex-1 custom-scrollbar">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead className="sticky top-0 bg-slate-800/90 backdrop-blur-md z-10 shadow-sm">
-                      <tr className="text-slate-300 uppercase tracking-wider text-xs font-semibold">
-                        <th className="p-4">Waktu Masuk</th><th className="p-4">Tag / Keperluan</th><th className="p-4">Pemilik</th><th className="p-4 text-center">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-700/50">
-                      {loading ? (
-                         <tr><td colSpan="4" className="p-12 text-center text-slate-400 animate-pulse">Memuat data langsung dari server...</td></tr>
-                      ) : logs.length === 0 ? (
-                         <tr><td colSpan="4" className="p-12 text-center text-slate-400">Area parkir saat ini kosong.</td></tr>
-                      ) : logs.map(log => (
-                        <tr key={log.id} className="hover:bg-slate-800/50 transition-colors group">
-                          <td className="p-4 text-slate-300 font-mono text-xs">{new Date(log.time_in).toLocaleTimeString('id-ID', { hour12: false })}</td>
-                          <td className="p-4 font-mono text-xs">{log.is_manual ? <span className="text-purple-300 bg-purple-900/40 px-2 py-1 rounded-md border border-purple-500/30">📝 {log.purpose}</span> : <span className="text-yellow-400 font-bold tracking-wider">{log.uhf_scanned || log.rfid_scanned}</span>}</td>
-                          <td className="p-4 text-white font-medium flex items-center gap-2">
-                             {log.members?.name} {log.is_manual && <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300 font-semibold uppercase">Tamu</span>}
-                          </td>
-                          <td className="p-4 text-center">
-                            <button onClick={() => handleCheckout(log.id)} className="bg-red-900/30 text-red-400 border border-red-800/50 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg transition-all active:scale-95 text-xs font-bold opacity-50 group-hover:opacity-100">Checkout</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               </div>
             </div>
           )}
@@ -352,35 +389,20 @@ function AdminWeb() {
             <div className="max-w-2xl mx-auto animate-pop-in mt-4">
               <div className="glass-panel rounded-3xl p-10 border border-slate-700/50 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/10 rounded-full blur-[80px] -z-10"></div>
-                
                 <div className="flex items-center gap-4 mb-8 border-b border-slate-700 pb-5">
-                  <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-2xl shadow-lg shadow-purple-500/30">
-                    <span className="text-2xl text-white">📝</span>
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-black text-white tracking-wide">Input Kendaraan Manual</h2>
-                    <p className="text-sm text-slate-400 mt-1">Catat tamu atau kendaraan darurat tanpa kartu akses.</p>
-                  </div>
+                  <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-2xl shadow-lg shadow-purple-500/30"><span className="text-2xl text-white">📝</span></div>
+                  <div><h2 className="text-2xl font-black text-white tracking-wide">Input Kendaraan Manual</h2><p className="text-sm text-slate-400 mt-1">Catat tamu atau kendaraan darurat tanpa kartu akses.</p></div>
                 </div>
-                
                 <form onSubmit={handleManualSubmit} className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-300 mb-2">Nama Tamu / Pengendara</label>
-                    <input type="text" name="name" required value={manualData.name} onChange={handleManualChange} placeholder="Contoh: Budi Santoso..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-300 mb-2">Keperluan / Keterangan</label>
-                    <textarea name="purpose" required value={manualData.purpose} onChange={handleManualChange} placeholder="Kurir paket, Tamu VIP Mobil Plat H 1 XYZ..." rows="3" className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none resize-none transition-all"></textarea>
-                  </div>
-                  <button type="submit" disabled={availableSlots <= 0} className={`w-full font-black text-lg py-4 rounded-xl transition-all active:scale-95 shadow-xl ${availableSlots > 0 ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-500/30' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}`}>
-                    {availableSlots > 0 ? 'Buka Gerbang & Masukkan Ke Area' : '⚠️ Area Parkir Penuh'}
-                  </button>
+                  <div><label className="block text-sm font-bold text-slate-300 mb-2">Nama Tamu / Pengendara</label><input type="text" name="name" required value={manualData.name} onChange={handleManualChange} placeholder="Contoh: Budi Santoso..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none transition-all" /></div>
+                  <div><label className="block text-sm font-bold text-slate-300 mb-2">Keperluan / Keterangan</label><textarea name="purpose" required value={manualData.purpose} onChange={handleManualChange} placeholder="Kurir paket, Tamu VIP Mobil Plat H 1 XYZ..." rows="3" className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none resize-none transition-all"></textarea></div>
+                  <button type="submit" disabled={availableSlots <= 0} className={`w-full font-black text-lg py-4 rounded-xl transition-all active:scale-95 shadow-xl ${availableSlots > 0 ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-500/30' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}`}>{availableSlots > 0 ? 'Buka Gerbang & Masukkan Ke Area' : '⚠️ Area Parkir Penuh'}</button>
                 </form>
               </div>
             </div>
           )}
 
-          {/* TAB: MEMBER */}
+          {/* TAB: MANAJEMEN MEMBER */}
           {activeTab === 'members' && (
             <div className="glass-panel rounded-2xl p-6 border border-slate-700/50 shadow-xl animate-fade-in flex flex-col h-[calc(100vh-160px)]">
               <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4">👥 Daftar Member & Akses Terdaftar</h2>
@@ -406,7 +428,7 @@ function AdminWeb() {
             </div>
           )}
 
-          {/* TAB: HISTORY */}
+          {/* TAB: HISTORI PARKIR */}
           {activeTab === 'history' && (
             <div className="glass-panel rounded-2xl p-6 border border-slate-700/50 shadow-xl animate-fade-in flex flex-col h-[calc(100vh-160px)]">
               <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4">🕒 Riwayat Kendaraan Keluar (24 Jam Terakhir)</h2>
@@ -434,7 +456,7 @@ function AdminWeb() {
 }
 
 // =====================================================================
-// 2. WEB PENGGUNA (VMS GERBANG) - [SAMA SEPERTI SEBELUMNYA]
+// 2. WEB PENGGUNA (VMS GERBANG)
 // =====================================================================
 function PublicWeb() {
   const [logs, setLogs] = useState([]);
@@ -566,7 +588,6 @@ export default function App() {
 
   return (
     <>
-      {/* INJEKSI CUSTOM CSS UNTUK ANIMASI & STYLING TAMBAHAN */}
       <style>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes popIn { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
@@ -603,7 +624,7 @@ export default function App() {
                   <span className="text-3xl">🛡️</span>
                 </div>
                 <h2 className="text-3xl font-bold text-blue-400 mb-3 group-hover:text-blue-300 transition-colors">Web Admin SCADA</h2>
-                <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">Akses dasbor kontrol gerbang, manajemen pendaftaran member, input tamu manual, dan histori riwayat parkir.</p>
+                <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">Akses dasbor kontrol gerbang, pendaftaran member, input tamu manual, dan histori riwayat parkir.</p>
               </button>
 
               <button onClick={() => window.location.hash = 'public'} className="group relative glass-panel border border-slate-700 hover:border-green-500/50 p-10 rounded-3xl w-full md:w-1/2 text-left overflow-hidden transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_20px_40px_rgba(34,197,94,0.2)]">
