@@ -25,7 +25,7 @@ const enrichLogsWithMembers = async (logsData) => {
 };
 
 // =====================================================================
-// 1. WEB ADMIN
+// 1. WEB ADMIN (LAYOUT SIDEBAR KIRI)
 // =====================================================================
 function AdminWeb() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -91,7 +91,7 @@ function AdminWeb() {
           uhf_scanned: payload.new.uhf_scanned || prev.uhf_scanned,
           rfid_scanned: payload.new.rfid_scanned || prev.rfid_scanned
         }));
-        showAlert(`📡 TAG BARU TERDETEKSI: ${detectedId}. Silakan isi data!`, true);
+        showAlert(`📡 TAG BARU TERDETEKSI: ${detectedId}. Silakan isi form pendaftaran!`, true);
         supabase.from('pending_rfid').delete().eq('id', payload.new.id).then();
       })
       .subscribe();
@@ -154,7 +154,7 @@ function AdminWeb() {
       const { error } = await supabase.from('members').insert([submitData]);
       if (error) showAlert('Gagal mendaftar. RFID/UHF mungkin sudah ada.', false);
       else {
-        showAlert('Berhasil diverifikasi!', true);
+        showAlert('Berhasil mendaftarkan akses!', true);
         setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
         fetchMembers();
       }
@@ -179,7 +179,7 @@ function AdminWeb() {
     if(window.confirm('Keluarkan kendaraan ini dari area parkir?')) {
       const { error } = await supabase.from('parking_logs').update({ status: 'OUT', time_out: new Date().toISOString() }).eq('id', id);
       if (error) showAlert('Gagal mengeluarkan kendaraan.', false);
-      else showAlert('Kendaraan dikeluarkan.', true);
+      else showAlert('Kendaraan sukses dikeluarkan.', true);
     }
   };
 
@@ -188,21 +188,22 @@ function AdminWeb() {
       id: member.id, rfid_scanned: member.rfid_scanned || '', uhf_scanned: member.uhf_scanned || '',
       plate_scanned: member.plate_scanned || '', name: member.name || '', telegram_chat_id: member.telegram_chat_id || '' 
     });
-    setEditMode(true); setActiveTab('dashboard'); window.scrollTo(0, 0);
+    setEditMode(true); setActiveTab('dashboard');
   };
 
   const deleteMember = async (id) => {
-    if(window.confirm('Yakin ingin menghapus?')) {
+    if(window.confirm('Yakin ingin menghapus member ini dari database?')) {
       await supabase.from('members').delete().eq('id', id);
-      showAlert('Member dihapus.', true); fetchMembers();
+      showAlert('Member berhasil dihapus.', true); fetchMembers();
     }
   };
 
+  // ----------------------------------------------------
   // TAMPILAN LOGIN ADMIN
+  // ----------------------------------------------------
   if (!isAuthenticated) {
     return (
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-black min-h-screen flex items-center justify-center text-white font-sans relative overflow-hidden">
-        {/* Ornamen Latar Belakang */}
         <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-blue-600/20 rounded-full blur-[100px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-purple-600/20 rounded-full blur-[100px]"></div>
         
@@ -219,84 +220,183 @@ function AdminWeb() {
     );
   }
 
-  // TAMPILAN DASHBOARD ADMIN
+  // ----------------------------------------------------
+  // TAMPILAN DASHBOARD ADMIN (DENGAN SIDEBAR KIRI)
+  // ----------------------------------------------------
   return (
-    <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-black text-slate-100 font-sans min-h-screen flex flex-col animate-fade-in">
-      <header className="glass-panel border-b border-slate-700/50 p-6 shadow-xl sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">DASHBOARD SCADA</h1>
-            <p className="text-sm text-slate-400 mt-1 font-medium">Laboratorium Kendali - Polines</p>
-          </div>
-          <div className="flex gap-4 items-center">
-            <div className="bg-slate-900/50 border border-slate-700/50 px-5 py-2 rounded-xl text-center shadow-inner">
-              <span className="text-xs text-slate-400 block uppercase font-semibold">Sisa Slot Parkir</span>
-              <span className={`text-2xl font-black ${availableSlots === 0 ? 'text-red-500 animate-pulse' : 'text-green-400'}`}>{availableSlots} / {MAX_SLOTS}</span>
-            </div>
-            <button onClick={() => { setIsAuthenticated(false); window.location.hash = ''; }} className="text-sm bg-red-900/40 text-red-400 border border-red-800/50 hover:bg-red-600 hover:text-white px-5 py-2.5 rounded-xl transition-all active:scale-95 font-semibold">Log Out</button>
-          </div>
+    <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-black text-slate-100 font-sans h-screen flex overflow-hidden animate-fade-in">
+      
+      {/* 📌 SIDEBAR KIRI */}
+      <aside className="w-72 glass-panel border-r border-slate-700/50 flex flex-col relative z-20 shadow-2xl flex-shrink-0">
+        <div className="p-6 border-b border-slate-700/50 text-center">
+          <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 tracking-wide mt-2">SCADA PARKIR</h1>
+          <p className="text-xs text-slate-400 mt-2 font-medium bg-slate-800/50 inline-block px-3 py-1 rounded-full border border-slate-700">Lab Kendali - Polines</p>
         </div>
-        
-        <div className="max-w-7xl mx-auto flex gap-3 relative overflow-x-auto pb-1 custom-scrollbar">
-          <button onClick={() => setActiveTab('dashboard')} className={`px-5 py-2.5 whitespace-nowrap rounded-t-xl font-bold transition-all duration-300 ${activeTab === 'dashboard' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}>📡 Monitor & Form RFID</button>
-          <button onClick={() => setActiveTab('manual')} className={`px-5 py-2.5 whitespace-nowrap rounded-t-xl font-bold transition-all duration-300 ${activeTab === 'manual' ? 'bg-gradient-to-r from-purple-600 to-pink-500 text-white shadow-lg shadow-purple-500/20' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}>📝 Tamu & Manual</button>
-          <button onClick={() => setActiveTab('members')} className={`px-5 py-2.5 whitespace-nowrap rounded-t-xl font-bold transition-all duration-300 ${activeTab === 'members' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}>👥 Manajemen Member</button>
-          <button onClick={() => setActiveTab('history')} className={`px-5 py-2.5 whitespace-nowrap rounded-t-xl font-bold transition-all duration-300 ${activeTab === 'history' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}>🕒 Histori 24 Jam</button>
+
+        <nav className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+          <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'dashboard' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
+            <span className="text-xl">📡</span> Monitor & Form
+          </button>
           
-          {alert.show && (
-            <div className={`absolute right-0 top-0 p-3.5 rounded-xl shadow-2xl border z-50 flex items-center gap-2 animate-slide-down ${alert.isSuccess ? 'bg-green-900/90 border-green-500/50 text-green-100 backdrop-blur-md' : 'bg-red-900/90 border-red-500/50 text-red-100 backdrop-blur-md'}`}>
-              <span className="text-lg">{alert.isSuccess ? '✅' : '⚠️'}</span>
-              <span className="font-medium text-sm">{alert.msg}</span>
+          <button onClick={() => setActiveTab('manual')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'manual' ? 'bg-gradient-to-r from-purple-600 to-pink-500 text-white shadow-lg shadow-purple-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
+            <span className="text-xl">📝</span> Tamu & Manual
+          </button>
+          
+          <button onClick={() => setActiveTab('members')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'members' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
+            <span className="text-xl">👥</span> Manajemen Member
+          </button>
+          
+          <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'history' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
+            <span className="text-xl">🕒</span> Histori 24 Jam
+          </button>
+        </nav>
+
+        <div className="p-4 border-t border-slate-700/50">
+          <button onClick={() => { setIsAuthenticated(false); window.location.hash = ''; }} className="w-full flex items-center justify-center gap-2 bg-red-900/20 text-red-400 border border-red-800/50 hover:bg-red-600 hover:text-white px-4 py-3.5 rounded-xl transition-all active:scale-95 font-semibold">
+            <span>🚪</span> Log Out
+          </button>
+        </div>
+      </aside>
+
+      {/* 📌 KONTEN UTAMA (KANAN) */}
+      <main className="flex-1 flex flex-col h-screen relative overflow-hidden bg-gradient-to-br from-slate-900/50 to-black">
+        
+        {/* Header Atas (Top Bar) */}
+        <header className="p-6 flex justify-between items-center border-b border-slate-800/50 glass-panel">
+          <div className="flex items-center gap-3">
+             <span className="text-slate-400 font-medium">Status Sistem:</span>
+             <span className="flex items-center gap-2 bg-green-900/30 text-green-400 border border-green-800/50 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-pulse">
+               <span className="w-2 h-2 rounded-full bg-green-400"></span> Online
+             </span>
+          </div>
+          
+          <div className="flex gap-4 items-center">
+            {alert.show && (
+              <div className={`px-4 py-2 rounded-xl shadow-2xl border flex items-center gap-2 animate-slide-down ${alert.isSuccess ? 'bg-green-900/90 border-green-500/50 text-green-100' : 'bg-red-900/90 border-red-500/50 text-red-100'}`}>
+                <span className="text-lg">{alert.isSuccess ? '✅' : '⚠️'}</span>
+                <span className="font-medium text-sm">{alert.msg}</span>
+              </div>
+            )}
+            
+            <div className="bg-slate-800/80 border border-slate-700/50 px-5 py-2 rounded-xl text-center shadow-inner flex items-center gap-4">
+              <span className="text-xs text-slate-400 uppercase font-semibold tracking-wider">Sisa Slot Area</span>
+              <span className={`text-2xl font-black ${availableSlots === 0 ? 'text-red-500 animate-pulse' : 'text-green-400'}`}>
+                {availableSlots} <span className="text-slate-600 text-lg font-medium">/ {MAX_SLOTS}</span>
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {/* Area Konten Dinamis yang bisa di-scroll */}
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          
+          {/* TAB: DASHBOARD (Monitor & Form) */}
+          {activeTab === 'dashboard' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
+              {/* Form Pendaftaran */}
+              <div className="glass-panel rounded-2xl p-6 lg:col-span-1 h-fit shadow-xl border border-slate-700/50">
+                <h2 className="text-lg font-bold mb-6 text-white border-b border-slate-700 pb-3 flex items-center gap-2">
+                  {editMode ? <span className="text-yellow-400">✏️ Edit Data Akses</span> : "➕ Pendaftaran Akses"}
+                </h2>
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">UID UHF</label><input type="text" name="uhf_scanned" value={formData.uhf_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2.5 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all text-sm font-mono text-blue-300" /></div>
+                    <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">UID RFID</label><input type="text" name="rfid_scanned" value={formData.rfid_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2.5 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all text-sm font-mono text-cyan-300" /></div>
+                  </div>
+                  <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">Plat Nomor Kendaraan</label><input type="text" name="plate_scanned" required value={formData.plate_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 uppercase focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all font-mono font-bold tracking-widest text-lg" /></div>
+                  <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">Nama Lengkap</label><input type="text" name="name" required value={formData.name} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all" /></div>
+                  <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">ID Telegram <span className="font-normal opacity-50">(Opsional)</span></label><input type="text" name="telegram_chat_id" value={formData.telegram_chat_id} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all font-mono text-sm" /></div>
+                  <div className="flex gap-3 pt-2">
+                    <button type="submit" className={`flex-1 py-3 rounded-lg font-bold transition-all active:scale-95 shadow-lg ${editMode ? 'bg-gradient-to-r from-yellow-600 to-orange-500 shadow-yellow-600/20' : 'bg-gradient-to-r from-blue-600 to-cyan-500 shadow-blue-500/20'} text-white`}>{editMode ? 'Update Data' : 'Simpan Data'}</button>
+                    {editMode && <button type="button" onClick={() => setEditMode(false)} className="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-5 rounded-lg transition-all active:scale-95">Batal</button>}
+                  </div>
+                </form>
+              </div>
+              
+              {/* Tabel Live Monitor */}
+              <div className="glass-panel rounded-2xl p-6 lg:col-span-2 shadow-xl border border-slate-700/50 flex flex-col h-full">
+                <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4 flex items-center gap-2">🚗 Kendaraan di Dalam Area (Live)</h2>
+                <div className="overflow-auto rounded-lg border border-slate-700/50 flex-1 custom-scrollbar">
+                  <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead className="sticky top-0 bg-slate-800/90 backdrop-blur-md z-10 shadow-sm">
+                      <tr className="text-slate-300 uppercase tracking-wider text-xs font-semibold">
+                        <th className="p-4">Waktu Masuk</th><th className="p-4">Tag / Keperluan</th><th className="p-4">Pemilik</th><th className="p-4 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                      {loading ? (
+                         <tr><td colSpan="4" className="p-12 text-center text-slate-400 animate-pulse">Memuat data langsung dari server...</td></tr>
+                      ) : logs.length === 0 ? (
+                         <tr><td colSpan="4" className="p-12 text-center text-slate-400">Area parkir saat ini kosong.</td></tr>
+                      ) : logs.map(log => (
+                        <tr key={log.id} className="hover:bg-slate-800/50 transition-colors group">
+                          <td className="p-4 text-slate-300 font-mono text-xs">{new Date(log.time_in).toLocaleTimeString('id-ID', { hour12: false })}</td>
+                          <td className="p-4 font-mono text-xs">{log.is_manual ? <span className="text-purple-300 bg-purple-900/40 px-2 py-1 rounded-md border border-purple-500/30">📝 {log.purpose}</span> : <span className="text-yellow-400 font-bold tracking-wider">{log.uhf_scanned || log.rfid_scanned}</span>}</td>
+                          <td className="p-4 text-white font-medium flex items-center gap-2">
+                             {log.members?.name} {log.is_manual && <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300 font-semibold uppercase">Tamu</span>}
+                          </td>
+                          <td className="p-4 text-center">
+                            <button onClick={() => handleCheckout(log.id)} className="bg-red-900/30 text-red-400 border border-red-800/50 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg transition-all active:scale-95 text-xs font-bold opacity-50 group-hover:opacity-100">Checkout</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto p-6 w-full flex-1 animate-fade-in">
-        {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="glass-panel rounded-2xl p-6 lg:col-span-1 h-fit shadow-xl border border-slate-700/50">
-              <h2 className="text-lg font-bold mb-6 text-white border-b border-slate-700 pb-3 flex items-center gap-2">
-                {editMode ? <span className="text-yellow-400">✏️ Edit Data Akses</span> : "➕ Pendaftaran Akses"}
-              </h2>
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">UID UHF</label><input type="text" name="uhf_scanned" value={formData.uhf_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2.5 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all text-sm" /></div>
-                  <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">UID RFID</label><input type="text" name="rfid_scanned" value={formData.rfid_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-2.5 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all text-sm" /></div>
+          {/* TAB: MANUAL / TAMU */}
+          {activeTab === 'manual' && (
+            <div className="max-w-2xl mx-auto animate-pop-in mt-4">
+              <div className="glass-panel rounded-3xl p-10 border border-slate-700/50 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/10 rounded-full blur-[80px] -z-10"></div>
+                
+                <div className="flex items-center gap-4 mb-8 border-b border-slate-700 pb-5">
+                  <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-2xl shadow-lg shadow-purple-500/30">
+                    <span className="text-2xl text-white">📝</span>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-white tracking-wide">Input Kendaraan Manual</h2>
+                    <p className="text-sm text-slate-400 mt-1">Catat tamu atau kendaraan darurat tanpa kartu akses.</p>
+                  </div>
                 </div>
-                <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">Plat Nomor</label><input type="text" name="plate_scanned" required value={formData.plate_scanned} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 uppercase focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all font-mono font-bold" /></div>
-                <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">Nama Lengkap</label><input type="text" name="name" required value={formData.name} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all" /></div>
-                <div><label className="block text-xs font-semibold text-slate-400 mb-1.5">ID Telegram <span className="font-normal opacity-50">(Opsional)</span></label><input type="text" name="telegram_chat_id" value={formData.telegram_chat_id} onChange={handleInputChange} className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none transition-all font-mono text-sm" /></div>
-                <div className="flex gap-3 pt-2">
-                  <button type="submit" className={`flex-1 py-3 rounded-lg font-bold transition-all active:scale-95 shadow-lg ${editMode ? 'bg-gradient-to-r from-yellow-600 to-orange-500 shadow-yellow-600/20' : 'bg-gradient-to-r from-blue-600 to-cyan-500 shadow-blue-500/20'} text-white`}>{editMode ? 'Update Data' : 'Simpan Data'}</button>
-                  {editMode && <button type="button" onClick={() => setEditMode(false)} className="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 px-5 rounded-lg transition-all active:scale-95">Batal</button>}
-                </div>
-              </form>
+                
+                <form onSubmit={handleManualSubmit} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">Nama Tamu / Pengendara</label>
+                    <input type="text" name="name" required value={manualData.name} onChange={handleManualChange} placeholder="Contoh: Budi Santoso..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">Keperluan / Keterangan</label>
+                    <textarea name="purpose" required value={manualData.purpose} onChange={handleManualChange} placeholder="Kurir paket, Tamu VIP Mobil Plat H 1 XYZ..." rows="3" className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none resize-none transition-all"></textarea>
+                  </div>
+                  <button type="submit" disabled={availableSlots <= 0} className={`w-full font-black text-lg py-4 rounded-xl transition-all active:scale-95 shadow-xl ${availableSlots > 0 ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-500/30' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}`}>
+                    {availableSlots > 0 ? 'Buka Gerbang & Masukkan Ke Area' : '⚠️ Area Parkir Penuh'}
+                  </button>
+                </form>
+              </div>
             </div>
-            
-            <div className="glass-panel rounded-2xl p-6 lg:col-span-2 shadow-xl border border-slate-700/50">
-              <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4 flex items-center gap-2">🚗 Kendaraan di Dalam Area (Live)</h2>
-              <div className="overflow-x-auto rounded-lg border border-slate-700/50">
+          )}
+
+          {/* TAB: MEMBER */}
+          {activeTab === 'members' && (
+            <div className="glass-panel rounded-2xl p-6 border border-slate-700/50 shadow-xl animate-fade-in flex flex-col h-[calc(100vh-160px)]">
+              <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4">👥 Daftar Member & Akses Terdaftar</h2>
+              <div className="overflow-auto rounded-lg border border-slate-700/50 flex-1 custom-scrollbar">
                 <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead>
-                    <tr className="bg-slate-800/80 text-slate-300 uppercase tracking-wider text-xs font-semibold">
-                      <th className="p-4">Waktu Masuk</th><th className="p-4">Tag / Keperluan</th><th className="p-4">Pemilik</th><th className="p-4 text-center">Aksi</th>
-                    </tr>
-                  </thead>
+                  <thead className="sticky top-0 bg-slate-800/90 backdrop-blur-md z-10 shadow-sm"><tr className="text-slate-300 uppercase text-xs font-semibold"><th className="p-4">UID UHF (Kaca)</th><th className="p-4">UID RFID (Kartu)</th><th className="p-4">Plat Nomor</th><th className="p-4">Nama Lengkap</th><th className="p-4 text-center">Aksi</th></tr></thead>
                   <tbody className="divide-y divide-slate-700/50">
-                    {loading ? (
-                       <tr><td colSpan="4" className="p-8 text-center text-slate-400 animate-pulse">Memuat data langsung...</td></tr>
-                    ) : logs.length === 0 ? (
-                       <tr><td colSpan="4" className="p-8 text-center text-slate-400">Area parkir saat ini kosong.</td></tr>
-                    ) : logs.map(log => (
-                      <tr key={log.id} className="hover:bg-slate-800/50 transition-colors group">
-                        <td className="p-4 text-slate-300 font-mono text-xs">{new Date(log.time_in).toLocaleTimeString('id-ID', { hour12: false })}</td>
-                        <td className="p-4 font-mono text-xs">{log.is_manual ? <span className="text-purple-300 bg-purple-900/40 px-2 py-1 rounded-md border border-purple-500/30">📝 {log.purpose}</span> : <span className="text-yellow-400 font-bold">{log.uhf_scanned || log.rfid_scanned}</span>}</td>
-                        <td className="p-4 text-white font-medium flex items-center gap-2">
-                           {log.members?.name} {log.is_manual && <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300 font-semibold uppercase">Tamu</span>}
-                        </td>
-                        <td className="p-4 text-center">
-                          <button onClick={() => handleCheckout(log.id)} className="bg-red-900/30 text-red-400 border border-red-800/50 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded-lg transition-all active:scale-95 text-xs font-bold opacity-70 group-hover:opacity-100">Checkout</button>
+                    {membersList.map(m => (
+                      <tr key={m.id} className="hover:bg-slate-800/50 transition-colors group">
+                        <td className="p-4 text-blue-400 font-mono text-xs">{m.uhf_scanned || '-'}</td>
+                        <td className="p-4 text-cyan-400 font-mono text-xs">{m.rfid_scanned || '-'}</td>
+                        <td className="p-4 text-slate-200 font-mono font-bold tracking-widest text-base">{m.plate_scanned}</td>
+                        <td className="p-4 font-medium text-white">{m.name}</td>
+                        <td className="p-4 text-center flex justify-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => editMember(m)} className="bg-blue-900/40 text-blue-300 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded border border-blue-800/50 transition-colors text-xs font-bold">Edit</button>
+                          <button onClick={() => deleteMember(m.id)} className="bg-red-900/40 text-red-300 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded border border-red-800/50 transition-colors text-xs font-bold">Hapus</button>
                         </td>
                       </tr>
                     ))}
@@ -304,93 +404,37 @@ function AdminWeb() {
                 </table>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === 'manual' && (
-          <div className="max-w-2xl mx-auto animate-pop-in">
-            <div className="glass-panel rounded-3xl p-10 border border-slate-700/50 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/10 rounded-full blur-[80px] -z-10"></div>
-              
-              <div className="flex items-center gap-4 mb-8 border-b border-slate-700 pb-5">
-                <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-2xl shadow-lg shadow-purple-500/30">
-                  <span className="text-2xl text-white">📝</span>
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-white tracking-wide">Input Kendaraan Manual</h2>
-                  <p className="text-sm text-slate-400 mt-1">Catat tamu atau kendaraan darurat tanpa kartu akses.</p>
-                </div>
+          {/* TAB: HISTORY */}
+          {activeTab === 'history' && (
+            <div className="glass-panel rounded-2xl p-6 border border-slate-700/50 shadow-xl animate-fade-in flex flex-col h-[calc(100vh-160px)]">
+              <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4">🕒 Riwayat Kendaraan Keluar (24 Jam Terakhir)</h2>
+              <div className="overflow-auto rounded-lg border border-slate-700/50 flex-1 custom-scrollbar">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="sticky top-0 bg-slate-800/90 backdrop-blur-md z-10 shadow-sm"><tr className="text-slate-300 uppercase text-xs font-semibold"><th className="p-4">Waktu Masuk</th><th className="p-4">Waktu Keluar</th><th className="p-4">Tag / Status</th><th className="p-4">Pemilik & Keterangan</th></tr></thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {historyLogs.map(log => (
+                      <tr key={log.id} className="hover:bg-slate-800/50 transition-colors">
+                        <td className="p-4 text-slate-300 font-mono text-xs">{new Date(log.time_in).toLocaleString('id-ID')}</td>
+                        <td className="p-4 text-slate-400 font-mono text-xs">{log.time_out ? new Date(log.time_out).toLocaleString('id-ID') : '-'}</td>
+                        <td className="p-4 font-mono text-xs">{log.is_manual ? <span className="text-purple-300 bg-purple-900/40 px-2 py-1 rounded border border-purple-500/30">📝 Tamu Manual</span> : <span className="text-yellow-400 font-bold">{log.uhf_scanned || log.rfid_scanned}</span>}</td>
+                        <td className="p-4 text-white font-medium">{log.members?.name} {log.is_manual && <span className="block text-[11px] text-slate-400 mt-1 opacity-80">{log.purpose}</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              
-              <form onSubmit={handleManualSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-bold text-slate-300 mb-2">Nama Tamu / Pengendara</label>
-                  <input type="text" name="name" required value={manualData.name} onChange={handleManualChange} placeholder="Budi Santoso..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-300 mb-2">Keperluan / Keterangan</label>
-                  <textarea name="purpose" required value={manualData.purpose} onChange={handleManualChange} placeholder="Kurir paket, Tamu VIP Mobil Plat H 1 XYZ..." rows="3" className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none resize-none transition-all"></textarea>
-                </div>
-                <button type="submit" disabled={availableSlots <= 0} className={`w-full font-black text-lg py-4 rounded-xl transition-all active:scale-95 shadow-xl ${availableSlots > 0 ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-500/30' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}`}>
-                  {availableSlots > 0 ? 'Buka Gerbang & Masukkan Area' : '⚠️ Area Parkir Penuh'}
-                </button>
-              </form>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'members' && (
-          <div className="glass-panel rounded-2xl p-6 border border-slate-700/50 shadow-xl animate-fade-in">
-            <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4">👥 Daftar Member & Akses</h2>
-            <div className="overflow-x-auto rounded-lg border border-slate-700/50">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead><tr className="bg-slate-800/80 text-slate-300 uppercase text-xs font-semibold"><th className="p-4">UHF</th><th className="p-4">RFID</th><th className="p-4">Plat Nomor</th><th className="p-4">Nama Lengkap</th><th className="p-4 text-center">Aksi</th></tr></thead>
-                <tbody className="divide-y divide-slate-700/50">
-                  {membersList.map(m => (
-                    <tr key={m.id} className="hover:bg-slate-800/50 transition-colors group">
-                      <td className="p-4 text-blue-400 font-mono text-xs">{m.uhf_scanned || '-'}</td>
-                      <td className="p-4 text-cyan-400 font-mono text-xs">{m.rfid_scanned || '-'}</td>
-                      <td className="p-4 text-slate-200 font-mono font-bold tracking-wider">{m.plate_scanned}</td>
-                      <td className="p-4 font-medium text-white">{m.name}</td>
-                      <td className="p-4 text-center flex justify-center gap-2 opacity-70 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => editMember(m)} className="bg-blue-900/40 text-blue-300 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded border border-blue-800/50 transition-colors text-xs font-bold">Edit</button>
-                        <button onClick={() => deleteMember(m.id)} className="bg-red-900/40 text-red-300 hover:bg-red-600 hover:text-white px-3 py-1.5 rounded border border-red-800/50 transition-colors text-xs font-bold">Hapus</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'history' && (
-          <div className="glass-panel rounded-2xl p-6 border border-slate-700/50 shadow-xl animate-fade-in">
-            <h2 className="text-lg font-bold text-white border-b border-slate-700 pb-3 mb-4">🕒 Riwayat Parkir Selesai</h2>
-            <div className="overflow-x-auto rounded-lg border border-slate-700/50">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead><tr className="bg-slate-800/80 text-slate-300 uppercase text-xs font-semibold"><th className="p-4">Waktu Masuk</th><th className="p-4">Waktu Keluar</th><th className="p-4">Tag / Status</th><th className="p-4">Pemilik</th></tr></thead>
-                <tbody className="divide-y divide-slate-700/50">
-                  {historyLogs.map(log => (
-                    <tr key={log.id} className="hover:bg-slate-800/50 transition-colors">
-                      <td className="p-4 text-slate-300 font-mono text-xs">{new Date(log.time_in).toLocaleString('id-ID')}</td>
-                      <td className="p-4 text-slate-400 font-mono text-xs">{log.time_out ? new Date(log.time_out).toLocaleString('id-ID') : '-'}</td>
-                      <td className="p-4 font-mono text-xs">{log.is_manual ? <span className="text-purple-300 bg-purple-900/40 px-2 py-1 rounded border border-purple-500/30">📝 Tamu Manual</span> : <span className="text-yellow-400 font-bold">{log.uhf_scanned || log.rfid_scanned}</span>}</td>
-                      <td className="p-4 text-white font-medium">{log.members?.name} {log.is_manual && <span className="block text-[11px] text-slate-400 mt-0.5 opacity-80">{log.purpose}</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </main>
     </div>
   );
 }
 
 // =====================================================================
-// 2. WEB PENGGUNA (VMS GERBANG)
+// 2. WEB PENGGUNA (VMS GERBANG) - [SAMA SEPERTI SEBELUMNYA]
 // =====================================================================
 function PublicWeb() {
   const [logs, setLogs] = useState([]);
@@ -440,7 +484,6 @@ function PublicWeb() {
 
   return (
     <div className="bg-black text-white font-sans h-screen flex flex-col relative overflow-hidden">
-      {/* Background Ambience */}
       <div className={`absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] transition-colors duration-1000 ${isFull ? 'from-red-950/20 via-black to-black' : 'from-blue-950/20 via-black to-black'}`}></div>
 
       <button onClick={() => window.location.hash = ''} className="absolute top-6 left-6 text-sm text-slate-600 hover:text-white transition-colors z-50 font-bold tracking-wider">← KELUAR</button>
@@ -452,7 +495,6 @@ function PublicWeb() {
         
         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-10 max-w-7xl mx-auto w-full pb-10">
           <div className={`relative border-2 rounded-[40px] p-12 flex flex-col justify-center items-center text-center transition-all duration-700 shadow-2xl backdrop-blur-sm overflow-hidden ${isFull ? 'border-red-600/50 bg-red-950/20 shadow-red-900/20' : 'border-blue-500/30 bg-blue-950/10 shadow-blue-900/20'}`}>
-            {/* Animasi Glow Di Belakang Angka */}
             <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full blur-[100px] opacity-40 transition-colors duration-700 ${isFull ? 'bg-red-600' : 'bg-green-500'}`}></div>
             
             <h2 className="text-3xl font-bold tracking-widest text-slate-400 mb-8 uppercase relative z-10">Sisa Slot Parkir</h2>
@@ -487,10 +529,8 @@ function PublicWeb() {
         </div>
       </div>
 
-      {/* OVERLAY NOTIFIKASI */}
       <div className={`absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-xl transition-all duration-500 ${notify.show ? 'opacity-100 z-50' : 'opacity-0 -z-10'}`}>
         <div className={`relative border border-slate-700/50 rounded-[50px] p-16 md:p-24 text-center w-11/12 max-w-6xl overflow-hidden ${notify.show ? 'animate-pop-in' : 'scale-90 opacity-0'} ${notify.type === 'IN' ? 'bg-blue-950/40 shadow-[0_0_150px_rgba(59,130,246,0.3)]' : 'bg-green-950/40 shadow-[0_0_150px_rgba(34,197,94,0.3)]'}`}>
-          {/* Efek Cahaya Notifikasi */}
           <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] rounded-full blur-[120px] -z-10 ${notify.type === 'IN' ? 'bg-blue-600/30' : 'bg-green-600/30'}`}></div>
 
           <h2 className={`text-6xl md:text-8xl font-black mb-8 tracking-tighter ${notify.type === 'IN' ? 'text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-cyan-300' : 'text-transparent bg-clip-text bg-gradient-to-r from-green-300 to-emerald-400'}`}>
@@ -543,7 +583,6 @@ export default function App() {
 
       {currentView === '#admin' ? <AdminWeb /> : currentView === '#public' ? <PublicWeb /> : (
         <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-black min-h-screen flex flex-col items-center justify-center font-sans text-white p-6 relative overflow-hidden">
-          {/* Background Ornaments */}
           <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] animate-pulse"></div>
           <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-green-600/10 rounded-full blur-[120px] animate-pulse"></div>
 
