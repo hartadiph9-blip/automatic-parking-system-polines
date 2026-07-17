@@ -9,8 +9,9 @@ const ADMIN_PIN = 'POLINES123';
 // =====================================================================
 const enrichLogsWithMembers = async (logsData) => {
   return await Promise.all(logsData.map(async (log) => {
-    if (log.manual_name) {
-      return { ...log, members: { name: log.manual_name }, is_manual: true };
+    if (!log.rfid_scanned && !log.uhf_scanned) {
+      const displayName = log.manual_name || 'Tamu Belum Dikenal';
+      return { ...log, members: { name: displayName }, is_manual: true };
     }
     const matchCol = log.uhf_scanned ? 'uhf_scanned' : 'rfid_scanned';
     const matchVal = log[matchCol];
@@ -45,8 +46,8 @@ function AdminWeb() {
 
   const availableSlots = Math.max(0, MAX_SLOTS - logs.length);
 
-  // Deteksi tamu manual yang sedang aktif di area parkir
-  const activeManualLog = logs.find(log => log.manual_name);
+  // Deteksi tamu manual yang sedang aktif di area parkir (manual = tidak punya RFID/UHF)
+  const activeManualLog = logs.find(log => log.is_manual && log.status === 'IN');
   const activeManualId = activeManualLog?.id || null;
 
   const handleLogin = (e) => {
@@ -77,10 +78,9 @@ function AdminWeb() {
             const enrichedArray = await enrichLogsWithMembers([payload.new]);
             setLogs(prevLogs => [enrichedArray[0], ...prevLogs]);
             
-            // [BARU] Otomatis alihkan tab ke halaman Manual saat ada tamu manual terdeteksi masuk
-            if (payload.new.manual_name) {
+            if (enrichedArray[0].is_manual) {
               setActiveTab('manual');
-              showAlert(`📝 TAMU MANUAL MASUK: ${payload.new.manual_name}. Silakan lengkapi atau edit jika perlu!`, true);
+              showAlert(`📝 TAMU MANUAL MASUK! Silakan isi nama dan keterangan di form.`, true);
             }
         }
       })
@@ -110,7 +110,6 @@ function AdminWeb() {
     return () => supabase.removeChannel(channel);
   }, [isAuthenticated]);
 
-  // Efek untuk memuat data tamu manual yang aktif ke form edit ketika berpindah ke tab manual
   useEffect(() => {
     if (activeTab === 'manual') {
       if (activeManualLog) {
@@ -122,7 +121,7 @@ function AdminWeb() {
         setManualData({ name: '', purpose: '' });
       }
     }
-  }, [activeTab, activeManualId]);
+  }, [activeTab, activeManualId, logs]);
 
   const fetchInitialLogs = async () => {
     setLoading(true);
@@ -433,13 +432,18 @@ function AdminWeb() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-black text-white tracking-wide">
-                      {activeManualLog ? 'Edit Kendaraan Manual' : 'Input Kendaraan Manual'}
+                      {activeManualLog ? (activeManualLog.manual_name ? 'Edit Kendaraan Manual' : '⚠️ Tamu Baru - Perlu Diisi!') : 'Input Kendaraan Manual'}
                     </h2>
                     <p className="text-sm text-slate-400 mt-1">
-                      {activeManualLog ? 'Perbarui informasi tamu atau kendaraan darurat aktif.' : 'Catat tamu atau kendaraan darurat tanpa kartu akses.'}
+                      {activeManualLog ? (activeManualLog.manual_name ? 'Perbarui informasi tamu atau kendaraan darurat aktif.' : 'Tamu baru terdeteksi! Silakan isi nama dan keterangan di bawah.') : 'Catat tamu atau kendaraan darurat tanpa kartu akses.'}
                     </p>
                   </div>
                 </div>
+                {activeManualLog && !activeManualLog.manual_name && (
+                  <div className="bg-yellow-900/30 border border-yellow-600/50 text-yellow-200 px-4 py-3 rounded-xl mb-6 text-sm font-semibold animate-pulse">
+                    ⚠️ Tamu baru terdeteksi masuk dari Supabase. Silakan isi nama dan keperluan tamu, lalu klik "Simpan & Perbarui Log".
+                  </div>
+                )}
                 <form onSubmit={handleManualSubmit} className="space-y-6">
                   <div>
                     <label className="block text-sm font-bold text-slate-300 mb-2">Nama Tamu / Pengendara</label>
@@ -461,7 +465,7 @@ function AdminWeb() {
                               : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700')
                       }`}
                     >
-                      {activeManualLog ? '💾 Perbarui Data Tamu' : (availableSlots > 0 ? 'Buka Gerbang & Masukkan Ke Area' : '⚠️ Area Parkir Penuh')}
+                      {activeManualLog ? '💾 Simpan & Perbarui Log' : (availableSlots > 0 ? 'Buka Gerbang & Masukkan Ke Area' : '⚠️ Area Parkir Penuh')}
                     </button>
                     {activeManualLog && (
                       <button 
