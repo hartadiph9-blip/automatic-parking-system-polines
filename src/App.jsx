@@ -30,7 +30,7 @@ const enrichLogsWithMembers = async (logsData) => {
 function AdminWeb() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [activeTab, setActiveTab] = useState('dashboard'); 
+  const [activeTab, setActiveTab] = useState('manual'); 
   
   const [logs, setLogs] = useState([]);
   const [membersList, setMembersList] = useState([]);
@@ -76,6 +76,12 @@ function AdminWeb() {
         if (payload.new.status === 'IN') {
             const enrichedArray = await enrichLogsWithMembers([payload.new]);
             setLogs(prevLogs => [enrichedArray[0], ...prevLogs]);
+            
+            // [BARU] Otomatis alihkan tab ke halaman Manual saat ada tamu manual terdeteksi masuk
+            if (payload.new.manual_name) {
+              setActiveTab('manual');
+              showAlert(`📝 TAMU MANUAL MASUK: ${payload.new.manual_name}. Silakan lengkapi atau edit jika perlu!`, true);
+            }
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
@@ -206,8 +212,8 @@ function AdminWeb() {
       if (error) showAlert('Gagal menginput tamu manual.', false);
       else {
         showAlert('Tamu manual berhasil dimasukkan!', true);
-        setManualData({ name: '', purpose: '' });
-        setActiveTab('dashboard'); // Kembali ke live monitor agar terlihat langsung
+        // Tetap di tab manual agar admin bisa langsung merubah datanya jika perlu
+        setActiveTab('manual'); 
       }
     }
   };
