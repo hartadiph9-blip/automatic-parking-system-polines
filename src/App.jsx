@@ -31,7 +31,7 @@ const enrichLogsWithMembers = async (logsData) => {
 function AdminWeb() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [activeTab, setActiveTab] = useState('manual'); 
+  const [activeTab, setActiveTab] = useState('dashboard'); 
   
   const [logs, setLogs] = useState([]);
   const [membersList, setMembersList] = useState([]);
@@ -41,14 +41,9 @@ function AdminWeb() {
   const [alert, setAlert] = useState({ show: false, msg: '', isSuccess: true });
   
   const [formData, setFormData] = useState({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
-  const [manualData, setManualData] = useState({ name: '', purpose: '' });
   const [editMode, setEditMode] = useState(false);
 
   const availableSlots = Math.max(0, MAX_SLOTS - logs.length);
-
-  // Deteksi tamu manual yang sedang aktif di area parkir (manual = tidak punya RFID/UHF)
-  const activeManualLog = logs.find(log => log.is_manual && log.status === 'IN');
-  const activeManualId = activeManualLog?.id || null;
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -77,11 +72,6 @@ function AdminWeb() {
         if (payload.new.status === 'IN') {
             const enrichedArray = await enrichLogsWithMembers([payload.new]);
             setLogs(prevLogs => [enrichedArray[0], ...prevLogs]);
-            
-            if (enrichedArray[0].is_manual) {
-              setActiveTab('manual');
-              showAlert(`📝 TAMU MANUAL MASUK! Silakan isi nama dan keterangan di form.`, true);
-            }
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'parking_logs' }, async (payload) => {
@@ -110,19 +100,6 @@ function AdminWeb() {
     return () => supabase.removeChannel(channel);
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (activeTab === 'manual') {
-      if (activeManualLog) {
-        setManualData({
-          name: activeManualLog.manual_name || '',
-          purpose: activeManualLog.purpose || ''
-        });
-      } else {
-        setManualData({ name: '', purpose: '' });
-      }
-    }
-  }, [activeTab, activeManualId, logs]);
-
   const fetchInitialLogs = async () => {
     setLoading(true);
     const { data } = await supabase.from('parking_logs').select('*').eq('status', 'IN').order('time_in', { ascending: false }); 
@@ -143,11 +120,6 @@ function AdminWeb() {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: name === 'plate_scanned' ? value.toUpperCase() : value }));
-  };
-
-  const handleManualChange = (e) => {
-    const { name, value } = e.target;
-    setManualData(prev => ({ ...prev, [name]: value }));
   };
 
   const showAlert = (msg, isSuccess) => {
@@ -183,35 +155,6 @@ function AdminWeb() {
         setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' });
         setActiveTab('members'); // Alihkan ke daftar member untuk melihat hasilnya
         fetchMembers();
-      }
-    }
-  };
-
-  const handleManualSubmit = async (e) => {
-    e.preventDefault();
-    if (activeManualLog) {
-      // Mode Edit: Perbarui data tamu manual yang aktif
-      const { error } = await supabase.from('parking_logs').update({
-        manual_name: manualData.name,
-        purpose: manualData.purpose
-      }).eq('id', activeManualLog.id);
-
-      if (error) showAlert('Gagal memperbarui data tamu manual.', false);
-      else {
-        showAlert('Data tamu manual berhasil diperbarui! Log telah diperbarui.', true);
-        setManualData({ name: manualData.name, purpose: manualData.purpose });
-      }
-    } else {
-      // Mode Tambah: Masukkan tamu manual baru
-      if (availableSlots <= 0) { showAlert('Slot parkir sudah penuh!', false); return; }
-      const { error } = await supabase.from('parking_logs').insert([{
-        status: 'IN', time_in: new Date().toISOString(), manual_name: manualData.name, purpose: manualData.purpose
-      }]);
-
-      if (error) showAlert('Gagal menginput tamu manual.', false);
-      else {
-        showAlert('Tamu manual berhasil dimasukkan! Log telah diperbarui.', true);
-        setManualData({ name: '', purpose: '' });
       }
     }
   };
@@ -279,10 +222,6 @@ function AdminWeb() {
           {/* [BARU] TAB PENDAFTARAN DI SIDEBAR KIRI */}
           <button onClick={() => setActiveTab('register')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'register' ? 'bg-gradient-to-r from-teal-600 to-emerald-500 text-white shadow-lg shadow-teal-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
             <span className="text-xl">➕</span> Pendaftaran Member
-          </button>
-          
-          <button onClick={() => setActiveTab('manual')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'manual' ? 'bg-gradient-to-r from-purple-600 to-pink-500 text-white shadow-lg shadow-purple-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
-            <span className="text-xl">📝</span> Tamu & Manual
           </button>
           
           <button onClick={() => setActiveTab('members')} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl font-bold transition-all duration-300 text-left ${activeTab === 'members' ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 translate-x-1' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 hover:translate-x-1'}`}>
@@ -414,70 +353,6 @@ function AdminWeb() {
                     </button>
                     {editMode && (
                       <button type="button" onClick={() => { setEditMode(false); setFormData({ id: null, rfid_scanned: '', uhf_scanned: '', plate_scanned: '', name: '', telegram_chat_id: '' }); setActiveTab('members'); }} className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-xl transition-all active:scale-95">Batal</button>
-                    )}
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* TAB: MANUAL / TAMU */}
-          {activeTab === 'manual' && (
-            <div className="max-w-2xl mx-auto animate-pop-in mt-4">
-              <div className="glass-panel rounded-3xl p-10 border border-slate-700/50 shadow-2xl relative overflow-hidden">
-                <div className={`absolute top-0 right-0 w-64 h-64 ${activeManualLog ? 'bg-yellow-600/10' : 'bg-purple-600/10'} rounded-full blur-[80px] -z-10`}></div>
-                <div className="flex items-center gap-4 mb-8 border-b border-slate-700 pb-5">
-                  <div className={`bg-gradient-to-br ${activeManualLog ? 'from-yellow-500 to-orange-500 shadow-yellow-500/30' : 'from-purple-500 to-pink-500 shadow-purple-500/30'} p-4 rounded-2xl shadow-lg`}>
-                    <span className="text-2xl text-white">📝</span>
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-black text-white tracking-wide">
-                      {activeManualLog ? (activeManualLog.manual_name ? 'Edit Kendaraan Manual' : '⚠️ Tamu Baru - Perlu Diisi!') : 'Input Kendaraan Manual'}
-                    </h2>
-                    <p className="text-sm text-slate-400 mt-1">
-                      {activeManualLog ? (activeManualLog.manual_name ? 'Perbarui informasi tamu atau kendaraan darurat aktif.' : 'Tamu baru terdeteksi! Silakan isi nama dan keterangan di bawah.') : 'Catat tamu atau kendaraan darurat tanpa kartu akses.'}
-                    </p>
-                  </div>
-                </div>
-                {activeManualLog && !activeManualLog.manual_name && (
-                  <div className="bg-yellow-900/30 border border-yellow-600/50 text-yellow-200 px-4 py-3 rounded-xl mb-6 text-sm font-semibold animate-pulse">
-                    ⚠️ Tamu baru terdeteksi masuk dari Supabase. Silakan isi nama dan keperluan tamu, lalu klik "Simpan & Perbarui Log".
-                  </div>
-                )}
-                <form onSubmit={handleManualSubmit} className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-bold text-slate-300 mb-2">Nama Tamu / Pengendara</label>
-                    <input type="text" name="name" required value={manualData.name} onChange={handleManualChange} placeholder="Contoh: Budi Santoso..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-300 mb-2">Keperluan / Keterangan</label>
-                    <textarea name="purpose" required value={manualData.purpose} onChange={handleManualChange} placeholder="Kurir paket, Tamu VIP Mobil Plat H 1 XYZ..." rows="3" className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none resize-none transition-all"></textarea>
-                  </div>
-                  <div className="flex gap-4">
-                    <button 
-                      type="submit" 
-                      disabled={!activeManualLog && availableSlots <= 0} 
-                      className={`flex-1 font-black text-lg py-4 rounded-xl transition-all active:scale-95 shadow-xl ${
-                        activeManualLog 
-                          ? 'bg-gradient-to-r from-yellow-600 to-orange-500 hover:from-yellow-500 hover:to-orange-400 text-white shadow-yellow-500/30'
-                          : (availableSlots > 0 
-                              ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-500/30' 
-                              : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700')
-                      }`}
-                    >
-                      {activeManualLog ? '💾 Simpan & Perbarui Log' : (availableSlots > 0 ? 'Buka Gerbang & Masukkan Ke Area' : '⚠️ Area Parkir Penuh')}
-                    </button>
-                    {activeManualLog && (
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          setManualData({ name: '', purpose: '' });
-                          setActiveTab('dashboard');
-                        }} 
-                        className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-xl transition-all active:scale-95"
-                      >
-                        Batal
-                      </button>
                     )}
                   </div>
                 </form>
@@ -707,7 +582,7 @@ export default function App() {
                   <span className="text-3xl">🛡️</span>
                 </div>
                 <h2 className="text-3xl font-bold text-blue-400 mb-3 group-hover:text-blue-300 transition-colors">Web Admin SCADA</h2>
-                <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">Akses dasbor kontrol gerbang, pendaftaran member, input tamu manual, dan histori riwayat parkir.</p>
+                <p className="text-slate-400 leading-relaxed group-hover:text-slate-300 transition-colors">Akses dasbor kontrol gerbang, pendaftaran member, dan histori riwayat parkir.</p>
               </button>
 
               <button onClick={() => window.location.hash = 'public'} className="group relative glass-panel border border-slate-700 hover:border-green-500/50 p-10 rounded-3xl w-full md:w-1/2 text-left overflow-hidden transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_20px_40px_rgba(34,197,94,0.2)]">
