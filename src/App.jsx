@@ -45,6 +45,10 @@ function AdminWeb() {
 
   const availableSlots = Math.max(0, MAX_SLOTS - logs.length);
 
+  // Deteksi tamu manual yang sedang aktif di area parkir
+  const activeManualLog = logs.find(log => log.manual_name);
+  const activeManualId = activeManualLog?.id || null;
+
   const handleLogin = (e) => {
     e.preventDefault();
     if (pinInput === ADMIN_PIN) {
@@ -99,6 +103,20 @@ function AdminWeb() {
 
     return () => supabase.removeChannel(channel);
   }, [isAuthenticated]);
+
+  // Efek untuk memuat data tamu manual yang aktif ke form edit ketika berpindah ke tab manual
+  useEffect(() => {
+    if (activeTab === 'manual') {
+      if (activeManualLog) {
+        setManualData({
+          name: activeManualLog.manual_name || '',
+          purpose: activeManualLog.purpose || ''
+        });
+      } else {
+        setManualData({ name: '', purpose: '' });
+      }
+    }
+  }, [activeTab, activeManualId]);
 
   const fetchInitialLogs = async () => {
     setLoading(true);
@@ -166,16 +184,31 @@ function AdminWeb() {
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
-    if (availableSlots <= 0) { showAlert('Slot parkir sudah penuh!', false); return; }
-    const { error } = await supabase.from('parking_logs').insert([{
-      status: 'IN', time_in: new Date().toISOString(), manual_name: manualData.name, purpose: manualData.purpose
-    }]);
+    if (activeManualLog) {
+      // Mode Edit: Perbarui data tamu manual yang aktif
+      const { error } = await supabase.from('parking_logs').update({
+        manual_name: manualData.name,
+        purpose: manualData.purpose
+      }).eq('id', activeManualLog.id);
 
-    if (error) showAlert('Gagal menginput tamu manual.', false);
-    else {
-      showAlert('Tamu manual berhasil dimasukkan!', true);
-      setManualData({ name: '', purpose: '' });
-      setActiveTab('dashboard'); // Kembali ke live monitor agar terlihat langsung
+      if (error) showAlert('Gagal memperbarui data tamu manual.', false);
+      else {
+        showAlert('Data tamu manual berhasil diperbarui!', true);
+        setActiveTab('dashboard'); // Kembali ke live monitor
+      }
+    } else {
+      // Mode Tambah: Masukkan tamu manual baru
+      if (availableSlots <= 0) { showAlert('Slot parkir sudah penuh!', false); return; }
+      const { error } = await supabase.from('parking_logs').insert([{
+        status: 'IN', time_in: new Date().toISOString(), manual_name: manualData.name, purpose: manualData.purpose
+      }]);
+
+      if (error) showAlert('Gagal menginput tamu manual.', false);
+      else {
+        showAlert('Tamu manual berhasil dimasukkan!', true);
+        setManualData({ name: '', purpose: '' });
+        setActiveTab('dashboard'); // Kembali ke live monitor agar terlihat langsung
+      }
     }
   };
 
@@ -388,15 +421,56 @@ function AdminWeb() {
           {activeTab === 'manual' && (
             <div className="max-w-2xl mx-auto animate-pop-in mt-4">
               <div className="glass-panel rounded-3xl p-10 border border-slate-700/50 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/10 rounded-full blur-[80px] -z-10"></div>
+                <div className={`absolute top-0 right-0 w-64 h-64 ${activeManualLog ? 'bg-yellow-600/10' : 'bg-purple-600/10'} rounded-full blur-[80px] -z-10`}></div>
                 <div className="flex items-center gap-4 mb-8 border-b border-slate-700 pb-5">
-                  <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-2xl shadow-lg shadow-purple-500/30"><span className="text-2xl text-white">📝</span></div>
-                  <div><h2 className="text-2xl font-black text-white tracking-wide">Input Kendaraan Manual</h2><p className="text-sm text-slate-400 mt-1">Catat tamu atau kendaraan darurat tanpa kartu akses.</p></div>
+                  <div className={`bg-gradient-to-br ${activeManualLog ? 'from-yellow-500 to-orange-500 shadow-yellow-500/30' : 'from-purple-500 to-pink-500 shadow-purple-500/30'} p-4 rounded-2xl shadow-lg`}>
+                    <span className="text-2xl text-white">📝</span>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-white tracking-wide">
+                      {activeManualLog ? 'Edit Kendaraan Manual' : 'Input Kendaraan Manual'}
+                    </h2>
+                    <p className="text-sm text-slate-400 mt-1">
+                      {activeManualLog ? 'Perbarui informasi tamu atau kendaraan darurat aktif.' : 'Catat tamu atau kendaraan darurat tanpa kartu akses.'}
+                    </p>
+                  </div>
                 </div>
                 <form onSubmit={handleManualSubmit} className="space-y-6">
-                  <div><label className="block text-sm font-bold text-slate-300 mb-2">Nama Tamu / Pengendara</label><input type="text" name="name" required value={manualData.name} onChange={handleManualChange} placeholder="Contoh: Budi Santoso..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none transition-all" /></div>
-                  <div><label className="block text-sm font-bold text-slate-300 mb-2">Keperluan / Keterangan</label><textarea name="purpose" required value={manualData.purpose} onChange={handleManualChange} placeholder="Kurir paket, Tamu VIP Mobil Plat H 1 XYZ..." rows="3" className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none resize-none transition-all"></textarea></div>
-                  <button type="submit" disabled={availableSlots <= 0} className={`w-full font-black text-lg py-4 rounded-xl transition-all active:scale-95 shadow-xl ${availableSlots > 0 ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-500/30' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}`}>{availableSlots > 0 ? 'Buka Gerbang & Masukkan Ke Area' : '⚠️ Area Parkir Penuh'}</button>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">Nama Tamu / Pengendara</label>
+                    <input type="text" name="name" required value={manualData.name} onChange={handleManualChange} placeholder="Contoh: Budi Santoso..." className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none transition-all" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-300 mb-2">Keperluan / Keterangan</label>
+                    <textarea name="purpose" required value={manualData.purpose} onChange={handleManualChange} placeholder="Kurir paket, Tamu VIP Mobil Plat H 1 XYZ..." rows="3" className="w-full bg-slate-900/60 border border-slate-600/50 rounded-xl p-4 text-white focus:border-purple-400 focus:ring-2 focus:ring-purple-400/30 outline-none resize-none transition-all"></textarea>
+                  </div>
+                  <div className="flex gap-4">
+                    <button 
+                      type="submit" 
+                      disabled={!activeManualLog && availableSlots <= 0} 
+                      className={`flex-1 font-black text-lg py-4 rounded-xl transition-all active:scale-95 shadow-xl ${
+                        activeManualLog 
+                          ? 'bg-gradient-to-r from-yellow-600 to-orange-500 hover:from-yellow-500 hover:to-orange-400 text-white shadow-yellow-500/30'
+                          : (availableSlots > 0 
+                              ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-500/30' 
+                              : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700')
+                      }`}
+                    >
+                      {activeManualLog ? '💾 Perbarui Data Tamu' : (availableSlots > 0 ? 'Buka Gerbang & Masukkan Ke Area' : '⚠️ Area Parkir Penuh')}
+                    </button>
+                    {activeManualLog && (
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setManualData({ name: '', purpose: '' });
+                          setActiveTab('dashboard');
+                        }} 
+                        className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-xl transition-all active:scale-95"
+                      >
+                        Batal
+                      </button>
+                    )}
+                  </div>
                 </form>
               </div>
             </div>
