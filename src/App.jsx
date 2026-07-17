@@ -199,8 +199,8 @@ function AdminWeb() {
 
       if (error) showAlert('Gagal memperbarui data tamu manual.', false);
       else {
-        showAlert('Data tamu manual berhasil diperbarui!', true);
-        setActiveTab('dashboard'); // Kembali ke live monitor
+        showAlert('Data tamu manual berhasil diperbarui! Log telah diperbarui.', true);
+        setManualData({ name: manualData.name, purpose: manualData.purpose });
       }
     } else {
       // Mode Tambah: Masukkan tamu manual baru
@@ -211,9 +211,8 @@ function AdminWeb() {
 
       if (error) showAlert('Gagal menginput tamu manual.', false);
       else {
-        showAlert('Tamu manual berhasil dimasukkan!', true);
-        // Tetap di tab manual agar admin bisa langsung merubah datanya jika perlu
-        setActiveTab('manual'); 
+        showAlert('Tamu manual berhasil dimasukkan! Log telah diperbarui.', true);
+        setManualData({ name: '', purpose: '' });
       }
     }
   };
